@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: djesi
+      POSTGRES_PASSWORD: djesi
+      POSTGRES_DB: djesi_jewels
+    ports:
+      - "5433:5432"
+    volumes:
+      - djesi-pg:/var/lib/postgresql/data
+
+volumes:
+  djesi-pg:
