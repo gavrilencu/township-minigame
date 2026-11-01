@@ -1,4 +1,6 @@
-import { checkDatabase } from "./db";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { checkDatabase, query } from "./db";
 
 const REASONS: Record<string, string> = {
   ECONNREFUSED: "conexiunea a fost refuzată (serverul Postgres nu ascultă la adresa din DATABASE_URL)",
@@ -17,12 +19,19 @@ function describe(err: unknown): string {
 /**
  * The game must not serve players without its database.
  * In production the process exits (Docker then restarts it); in development it only warns.
+ * With DB_MIGRATE_ON_START=true it first creates the missing tables (never the database itself);
+ * that is for hosts where a one-off `npm run db:migrate` is hard to run.
  */
 export async function checkOnStartup() {
   if (process.env.NEXT_PHASE === "phase-production-build") return;
+  const migrate = process.env.DB_MIGRATE_ON_START === "true";
   const attempts = 10;
   for (let i = 1; i <= attempts; i++) {
     try {
+      if (migrate) {
+        await query(await readFile(join(process.cwd(), "db", "schema.sql"), "utf8"));
+        console.log("✓ Tabelele jocului au fost verificate/create (DB_MIGRATE_ON_START=true).");
+      }
       await checkDatabase();
       console.log("✓ Baza de date e accesibilă și are tabelele jocului.");
       return;

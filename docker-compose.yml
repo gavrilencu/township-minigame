@@ -3,6 +3,7 @@
 # 1. Put DATABASE_URL in a `.env` file next to this one (see .env.example). Without it, compose refuses to start.
 #    A database on this computer is reachable from the container as host.docker.internal, not localhost.
 # 2. Create the tables once:  docker compose run --rm app node scripts/migrate.mjs
+#    (or set DB_MIGRATE_ON_START=true, e.g. on a hosting panel: the game then creates its tables at startup)
 # 3. Start:                   docker compose up -d --build
 #
 # If the database is unreachable or has no tables, the game exits at startup instead of serving players.
@@ -17,6 +18,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?Setează DATABASE_URL în fișierul .env (vezi .env.example)}
       PGSSL: ${PGSSL:-false}
+      DB_MIGRATE_ON_START: ${DB_MIGRATE_ON_START:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
