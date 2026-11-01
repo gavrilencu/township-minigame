@@ -1,15 +1,27 @@
-services:
-  db:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: djesi
-      POSTGRES_PASSWORD: djesi
-      POSTGRES_DB: djesi_jewels
-    ports:
-      - "5433:5432"
-    volumes:
-      - djesi-pg:/var/lib/postgresql/data
+# Runs only the game. PostgreSQL is external: Docker never creates a database.
+#
+# 1. Put DATABASE_URL in a `.env` file next to this one (see .env.example). Without it, compose refuses to start.
+#    A database on this computer is reachable from the container as host.docker.internal, not localhost.
+# 2. Create the tables once:  docker compose run --rm app node scripts/migrate.mjs
+# 3. Start:                   docker compose up -d --build
+#
+# If the database is unreachable or has no tables, the game exits at startup instead of serving players.
 
-volumes:
-  djesi-pg:
+services:
+  app:
+    build: .
+    image: djesi-jewels
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Setează DATABASE_URL în fișierul .env (vezi .env.example)}
+      PGSSL: ${PGSSL:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3

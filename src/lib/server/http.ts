@@ -14,6 +14,9 @@ export function handler<C>(fn: (req: Request, ctx: C) => Promise<unknown>) {
       if (err instanceof HttpError) return Response.json({ error: err.message }, { status: err.status });
       console.error(err);
       const code = (err as { code?: string }).code;
+      if (code === "42P01") {
+        return Response.json({ error: "Baza de date nu are tabelele jocului. Rulează npm run db:migrate." }, { status: 503 });
+      }
       const dbDown = (code && DB_DOWN.has(code)) || String(err).includes("DATABASE_URL");
       return Response.json(
         { error: dbDown ? "Serverul de date nu răspunde. Încearcă din nou." : "Ceva n-a mers bine pe server." },
