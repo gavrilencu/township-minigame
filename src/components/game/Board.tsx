@@ -10,6 +10,8 @@ import { BlockerArt, GEM_COLORS, GrassArt, IceArt, LockArt, PieceArt, SpecialArt
 interface BoardProps {
   frame: Frame;
   S: number;
+  /** bitmap per colour for the current cell size; null until drawn (SVG is used meanwhile) */
+  sprites: string[] | null;
   effects: Effect[];
   selected: Pos | null;
   hint: Pos[] | null;
@@ -31,7 +33,7 @@ function nudgeFor(hint: Pos[] | null, r: number, c: number): { dx: number; dy: n
   return other ? { dx: other.c - c, dy: other.r - r } : { dx: 0, dy: 0 };
 }
 
-export function Board({ frame, S, effects, selected, hint, targeting, boardRef, onSwipe, onTap }: BoardProps) {
+export function Board({ frame, S, sprites, effects, selected, hint, targeting, boardRef, onSwipe, onTap }: BoardProps) {
   const cells = frame.cells;
   const rows = cells.length;
   const cols = cells[0].length;
@@ -194,6 +196,7 @@ export function Board({ frame, S, effects, selected, hint, targeting, boardRef, 
               front={frame.swapped === tile.id}
               selected={same(selected, r, c)}
               nudge={nudgeFor(hint, r, c)}
+              sprite={!tile.special && sprites ? sprites[tile.color] : undefined}
             />
           ))}
         </AnimatePresence>
@@ -251,6 +254,7 @@ const TileView = memo(
     front,
     selected,
     nudge,
+    sprite,
   }: {
     tile: Tile;
     r: number;
@@ -263,6 +267,8 @@ const TileView = memo(
     selected: boolean;
     /** hint: lean towards the partner piece (dx, dy in cells), or pulse for a special */
     nudge: { dx: number; dy: number } | null;
+    /** pre-drawn bitmap of this piece, when available */
+    sprite?: string;
   }) {
     const [rows, setRows] = useState({ cur: r, prev: tile.spawnRow ?? r });
     const [delay] = useState(introDelay);
@@ -344,7 +350,13 @@ const TileView = memo(
               className={`relative h-full w-full ${tile.special ? "piece-in" : tile.id % 5 === 0 ? "idle-shine" : ""}`}
               style={tile.special ? undefined : { animationDelay: `${(tile.id % 13) * 0.9}s` }}
             >
-              <PieceArt tile={tile} />
+              {sprite ? (
+                // a data-URL bitmap drawn on this device; next/image has nothing to optimize here
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={sprite} alt="" draggable={false} className="block h-full w-full select-none" />
+              ) : (
+                <PieceArt tile={tile} />
+              )}
             </div>
           </div>
         </div>
@@ -352,6 +364,7 @@ const TileView = memo(
     );
   },
   (a, b) =>
+    a.sprite === b.sprite &&
     a.tile.id === b.tile.id &&
     a.tile.special === b.tile.special &&
     a.tile.color === b.tile.color &&
@@ -386,6 +399,18 @@ const SHARD_CLIPS = [
 ];
 
 const STAR_CLIP = "polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%)";
+
+/** How loud each cascade banner gets: size and colour grow with the level. */
+const BANNER_LEVEL: Record<string, number> = {
+  "Bine!": 1,
+  "Super!": 2,
+  "Minunat!": 3,
+  "Fantastic!": 4,
+  "Combo!": 4,
+  "Bravo!": 4,
+  "Mutări bonus!": 3,
+  "Amestecăm!": 1,
+};
 
 /**
  * A burst of debris. Pieces fly out, slow down and fall under gravity while spinning;
@@ -612,14 +637,16 @@ const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H }: { effects:
                 <div className="fx-ring" style={{ left: cx(e.c), top: cy(e.r), width: S * 1.8, height: S * 1.8 }} />
               </div>
             );
-          case "banner":
+          case "banner": {
+            const lvl = BANNER_LEVEL[e.text] ?? 2;
             return (
               <div key={e.id} className="absolute inset-0 flex items-center justify-center">
-                <div className="fx-banner title-stroke font-bold" style={{ fontSize: Math.max(34, S * 1.15) }}>
+                <div className={`fx-banner fx-banner-text fx-banner-l${lvl}`} style={{ fontSize: Math.max(32, S * (0.85 + lvl * 0.14)) }}>
                   {e.text}
                 </div>
               </div>
             );
+          }
           case "collect":
             return null;
         }

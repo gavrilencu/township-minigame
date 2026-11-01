@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "motion/react";
-import { HelpCircle, Loader2, LogOut, Map as MapIcon, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useState } from "react";
+import { HelpCircle, Loader2, LogOut, Map as MapIcon, Music, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { BOOSTERS, type BoosterId } from "@/lib/game/economy";
 import type { Goal } from "@/lib/game/types";
 import type { FinishResponse } from "@/lib/shared";
@@ -13,20 +13,73 @@ import { HowToPlay } from "./HowToPlay";
 
 export type FinishState = { status: "loading" } | { status: "ok"; data: FinishResponse } | { status: "error"; error: string };
 
-function CountUp({ value, duration = 900 }: { value: number; duration?: number }) {
-  const [shown, setShown] = useState(0);
+function CountUp({ value, from = 0, duration = 900, delay = 0 }: { value: number; from?: number; duration?: number; delay?: number }) {
+  const [shown, setShown] = useState(from);
   useEffect(() => {
     let raf = 0;
-    const t0 = performance.now();
+    const t0 = performance.now() + delay;
     const tick = (t: number) => {
-      const k = Math.min(1, (t - t0) / duration);
-      setShown(Math.round(value * (1 - Math.pow(1 - k, 3))));
+      const k = Math.min(1, Math.max(0, (t - t0) / duration));
+      setShown(Math.round(from + (value - from) * (1 - Math.pow(1 - k, 3))));
       if (k < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [value, duration]);
+  }, [value, from, duration, delay]);
   return <>{formatNumber(shown)}</>;
+}
+
+interface CoinFlight {
+  id: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Coins jump from the reward line into the purse; the purse counts up as they land. */
+function CoinRain({ from, to, total }: { from: React.RefObject<HTMLElement | null>; to: React.RefObject<HTMLElement | null>; total: number }) {
+  const [coins, setCoins] = useState<CoinFlight[]>([]);
+  useEffect(() => {
+    const a = from.current?.getBoundingClientRect();
+    const b = to.current?.getBoundingClientRect();
+    if (!a || !b) return;
+    const n = Math.min(10, 4 + Math.ceil(total / 25));
+    const list = Array.from({ length: n }, (_, i) => ({
+      id: i,
+      x0: a.left + a.width / 2 + (i % 3) * 8,
+      y0: a.top + a.height / 2,
+      x1: b.left + b.width / 2,
+      y1: b.top + b.height / 2,
+    }));
+    const t = setTimeout(() => setCoins(list), 250);
+    const done = setTimeout(() => setCoins([]), 250 + n * 70 + 700);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(done);
+    };
+  }, [from, to, total]);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[70]">
+      {coins.map((c, i) => (
+        <motion.div
+          key={c.id}
+          className="absolute left-0 top-0 -ml-3.5 -mt-3.5 h-7 w-7"
+          initial={{ x: c.x0, y: c.y0, scale: 0.6, opacity: 0 }}
+          animate={{
+            x: [c.x0, c.x0 + (c.x1 - c.x0) * 0.4, c.x1],
+            y: [c.y0, Math.min(c.y0, c.y1) - 50 - (i % 4) * 10, c.y1],
+            scale: [0.6, 1.2, 0.7],
+            opacity: [0, 1, 1],
+          }}
+          transition={{ duration: 0.55, delay: i * 0.07, ease: "easeInOut" }}
+          onAnimationComplete={() => i % 3 === 0 && play("coin")}
+        >
+          <Coin className="h-full w-full" />
+        </motion.div>
+      ))}
+    </div>
+  );
 }
 
 export function WinModal({
@@ -34,6 +87,7 @@ export function WinModal({
   level,
   stars,
   score,
+  coins,
   finish,
   onNext,
   onMap,
@@ -43,11 +97,15 @@ export function WinModal({
   level: number;
   stars: number;
   score: number;
+  /** the player's coins after the reward was added */
+  coins: number;
   finish: FinishState | null;
   onNext: () => void;
   onMap: () => void;
   onRetrySave: () => void;
 }) {
+  const rewardRef = useRef<HTMLSpanElement>(null);
+  const purseRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const timers = [0, 1, 2].filter((i) => i < stars).map((i) => setTimeout(() => play("star"), 450 + i * 380));
@@ -55,8 +113,11 @@ export function WinModal({
   }, [open, stars]);
 
   const data = finish?.status === "ok" ? finish.data : null;
+  const rewardTotal = data?.reward?.total ?? 0;
+  const flightMs = 250 + Math.min(10, 4 + Math.ceil(rewardTotal / 25)) * 70;
   return (
     <Modal open={open} title={`Nivelul ${level} complet!`} wide>
+      {open && rewardTotal > 0 && <CoinRain from={rewardRef} to={purseRef} total={rewardTotal} />}
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col">
           <div className="flex items-end justify-center gap-1 pb-1 pt-3">
@@ -93,6 +154,12 @@ export function WinModal({
         </div>
 
         <div className="min-w-0">
+          <div ref={purseRef} className="mb-2 flex items-center justify-end gap-1.5 text-[15px] font-bold text-ink-soft">
+            <Coin className="h-6 w-6" />
+            <span className="tabular-nums text-ink">
+              {rewardTotal > 0 ? <CountUp from={coins - rewardTotal} value={coins} duration={700} delay={flightMs} /> : formatNumber(coins)}
+            </span>
+          </div>
           <div className="panel-inset p-3">
             {!finish || finish.status === "loading" ? (
               <div className="flex items-center justify-center gap-2 py-2 text-ink-soft">
@@ -109,8 +176,8 @@ export function WinModal({
               <>
                 <div className="flex items-center justify-between">
                   <span className="text-[15px] font-semibold">Recompensă</span>
-                  <span className="flex items-center gap-1.5 text-[22px] font-bold text-[#b86a0a]">
-                    +<CountUp value={data!.reward?.total ?? 0} duration={1100} />
+                  <span ref={rewardRef} className="flex items-center gap-1.5 text-[22px] font-bold text-[#b86a0a]">
+                    +<CountUp value={rewardTotal} duration={900} />
                     <Coin className="h-6 w-6" />
                   </span>
                 </div>
@@ -241,13 +308,17 @@ export function FailModal({
 export function PauseModal({
   open,
   sound,
+  music,
   onToggleSound,
+  onToggleMusic,
   onResume,
   onQuit,
 }: {
   open: boolean;
   sound: boolean;
+  music: boolean;
   onToggleSound: () => void;
+  onToggleMusic: () => void;
   onResume: () => void;
   onQuit: () => void;
 }) {
@@ -266,11 +337,14 @@ export function PauseModal({
           <button onClick={onResume} className="btn btn-green h-14 w-full text-[20px]">
             <Play className="h-5 w-5 fill-white" /> Continuă
           </button>
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={onToggleSound} className="btn btn-blue h-12 text-[16px]">
+          <div className="grid grid-cols-3 gap-2.5">
+            <button onClick={onToggleSound} className={`btn h-12 text-[15px] ${sound ? "btn-blue" : "btn-purple"}`}>
               {sound ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />} {sound ? "Sunet" : "Mut"}
             </button>
-            <button onClick={() => setHelp(true)} className="btn btn-gold h-12 text-[16px]">
+            <button onClick={onToggleMusic} className={`btn h-12 text-[15px] ${music ? "btn-blue" : "btn-purple"}`}>
+              <Music className="h-5 w-5" /> {music ? "Muzică" : "Fără"}
+            </button>
+            <button onClick={() => setHelp(true)} className="btn btn-gold h-12 text-[15px]">
               <HelpCircle className="h-5 w-5" /> Ajutor
             </button>
           </div>

@@ -19,9 +19,11 @@ import { generateLevel } from "@/lib/game/levels";
 import type { Effect, Frame, Goal, Pos, SpecialKind } from "@/lib/game/types";
 import { assistMoves } from "@/lib/shared";
 import { play, unlockAudio } from "@/lib/sound";
+import { pieceSprites } from "@/lib/sprites";
 import { useGame } from "@/lib/store";
 import { worldOf, worldTheme } from "@/lib/worlds";
-import { GemDefs, GoalIcon, StarShape } from "../art/Pieces";
+import { WorldParticles } from "../art/Particles";
+import { GEM_COLORS, GemDefs, GoalIcon, PieceSources, StarShape } from "../art/Pieces";
 import { Scenery } from "../art/Scenery";
 import { BoosterIcon, formatNumber } from "../ui";
 import { Board } from "./Board";
@@ -39,8 +41,19 @@ interface Flyer {
   size: number;
 }
 
+interface StarFlyer {
+  id: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const adjacent = (a: Pos, b: Pos) => Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
+
+/** A frame worth a hit-stop: a big explosion or a special combo. */
+const isBig = (f: Frame) => f.effects.some((e) => (e.type === "blast" && e.radius >= 2) || (e.type === "banner" && (e.text === "Combo!" || e.text === "Fantastic!")));
 
 const TARGET_TEXT: Partial<Record<InGameBooster, string>> = {
   hammer: "Atinge piesa sau obstacolul de spart",
@@ -60,7 +73,9 @@ export function GameScreen({
 }) {
   const player = useGame((s) => s.player)!;
   const sound = useGame((s) => s.sound);
+  const music = useGame((s) => s.music);
   const toggleSound = useGame((s) => s.toggleSound);
+  const toggleMusic = useGame((s) => s.toggleMusic);
   const setPlayer = useGame((s) => s.setPlayer);
   const setResult = useGame((s) => s.setResult);
   const spendBoosterLocal = useGame((s) => s.spendBoosterLocal);
@@ -95,8 +110,13 @@ export function GameScreen({
   const [finish, setFinish] = useState<FinishState | null>(null);
   const [win, setWin] = useState<{ movesLeft: number; stars: number } | null>(null);
   const [S, setS] = useState(40);
+  const [sprites, setSprites] = useState<string[] | null>(null);
+  const [flash, setFlash] = useState(0);
+  const [starFlyers, setStarFlyers] = useState<StarFlyer[]>([]);
+  const [arrived, setArrived] = useState(0);
   const areaRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const starsRef = useRef<HTMLDivElement>(null);
   const goalRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [shakeScope, shakeAnimate] = useAnimate();
   const alive = useRef(true);
@@ -114,13 +134,23 @@ export function GameScreen({
     if (!el) return;
     const measure = () => {
       const { width, height } = el.getBoundingClientRect();
-      setS(Math.max(22, Math.floor(Math.min((width - 16) / engine.cols, (height - 14) / engine.rows, 64))));
+      setS(Math.max(22, Math.floor(Math.min((width - 16) / engine.cols, (height - 14 - 30) / engine.rows, 64))));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, [engine]);
+
+  // Pieces as bitmaps for this cell size; the board shows SVG until they are ready.
+  useEffect(() => {
+    let live = true;
+    const px = Math.round(S * Math.min(3, window.devicePixelRatio || 1));
+    void pieceSprites(px, GEM_COLORS.length).then((s) => live && setSprites(s));
+    return () => {
+      live = false;
+    };
+  }, [S]);
 
   useEffect(() => {
     const t = setTimeout(() => alive.current && setPhase("play"), 1900);
@@ -179,7 +209,33 @@ export function GameScreen({
       launchFlyers(f);
       shake(f);
       for (const s of f.sounds) play(s, f.cascade);
-      await wait(f.duration / speed);
+      // hit-stop: a big impact flashes the screen and holds for a few frames
+      const big = isBig(f);
+      if (big) setFlash((k) => k + 1);
+      await wait(f.duration / speed + (big ? 90 : 0));
+    }
+  }
+
+  /** Earned stars fly from the board into the star pill, one by one. */
+  function flyStars(count: number) {
+    const board = boardRef.current?.getBoundingClientRect();
+    const pill = starsRef.current?.getBoundingClientRect();
+    if (!board || !pill) return setArrived(count);
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        if (!alive.current) return;
+        const id = fxId.current--;
+        setStarFlyers((prev) => [
+          ...prev,
+          { id, x0: board.left + board.width / 2 + (i - 1) * 40, y0: board.top + board.height / 2, x1: pill.left + 16 + i * 16, y1: pill.top + pill.height / 2 },
+        ]);
+        play("star");
+        setTimeout(() => {
+          if (!alive.current) return;
+          setStarFlyers((prev) => prev.filter((f) => f.id !== id));
+          setArrived((n) => Math.max(n, i + 1));
+        }, 620);
+      }, i * 260);
     }
   }
 
@@ -204,7 +260,9 @@ export function GameScreen({
     setWin(result);
     play("win");
     banner("Bravo!");
-    await wait(1500);
+    await wait(500);
+    flyStars(result.stars);
+    await wait(1000 + result.stars * 260);
     if (engine.movesLeft > 0) {
       banner("Mutări bonus!");
       await wait(500);
@@ -356,11 +414,19 @@ export function GameScreen({
   const lowMoves = movesLeft <= 5 && phase !== "won" && phase !== "done";
   const nextBonus =
     finish?.status === "ok" && finish.data.result.stars === 0 ? assistMoves(finish.data.result.fails) : 0;
+  const celebrating = phase === "won" || phase === "done";
+  const pillStars = celebrating ? arrived : liveStars;
+  const dialogOpen = paused || !!buyAsk || phase === "outOfMoves" || phase === "done" || phase === "failed";
+  // star thresholds on the moves bar: where the fill (moves used) passes each star
+  const marks = [1, 1 - (0.12 * cfg.baseMoves) / cfg.moves, 1 - (0.3 * cfg.baseMoves) / cfg.moves];
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#5fc3ff]">
-      <Scenery theme={theme} />
       <GemDefs />
+      <PieceSources />
+      <div className={dialogOpen ? "anim-paused" : undefined}>
+      <Scenery theme={theme} />
+      <WorldParticles kind={theme.particles} seed={level} />
 
       <div className="absolute inset-0 flex gap-2 pb-[max(env(safe-area-inset-bottom),6px)] pl-[max(env(safe-area-inset-left),8px)] pr-[max(env(safe-area-inset-right),8px)] pt-[max(env(safe-area-inset-top),6px)]">
         {/* Left: wooden sign with the goals and the moves */}
@@ -415,22 +481,25 @@ export function GameScreen({
             </div>
           </div>
 
-          <div className="glass flex items-center justify-between rounded-2xl px-2 py-1 text-white">
+          <div ref={starsRef} className="glass-solid flex items-center justify-between rounded-2xl px-2 py-1 text-white">
             <div className="flex">
               {[1, 2, 3].map((s) => (
-                <StarShape key={s} filled={s <= (win?.stars ?? liveStars)} className="h-4 w-4" />
+                <motion.div key={`${s}-${s <= pillStars}`} initial={{ scale: celebrating ? 1.8 : 1 }} animate={{ scale: 1 }}>
+                  <StarShape filled={s <= pillStars} className="h-4 w-4" />
+                </motion.div>
               ))}
             </div>
             <span className="text-[13px] font-bold tabular-nums">{formatNumber(frame.score)}</span>
           </div>
         </aside>
 
-        {/* Center: board */}
+        {/* Center: board and the star bar */}
         <main ref={areaRef} className="relative flex min-w-0 flex-1 items-center justify-center">
-          <div ref={shakeScope}>
+          <div ref={shakeScope} className="flex flex-col items-center gap-2">
             <Board
               frame={frame}
               S={S}
+              sprites={sprites}
               effects={effects}
               selected={selected}
               hint={hint}
@@ -439,6 +508,7 @@ export function GameScreen({
               onSwipe={onSwipe}
               onTap={onTap}
             />
+            <StarBar width={engine.cols * S} used={cfg.moves - movesLeft} total={cfg.moves} marks={marks} lit={liveStars} />
           </div>
           <AnimatePresence>
             {phase === "intro" && (
@@ -526,9 +596,29 @@ export function GameScreen({
           <div className="h-10 shrink-0" />
         </aside>
       </div>
+      </div>
+
+      {flash > 0 && <div key={flash} className="hit-flash z-20" />}
 
       {/* Pieces flying to the goal panel */}
       <div className="pointer-events-none fixed inset-0 z-30">
+        {starFlyers.map((f) => (
+          <motion.div
+            key={f.id}
+            className="absolute left-0 top-0 -ml-6 -mt-6 h-12 w-12"
+            initial={{ x: f.x0, y: f.y0, scale: 0.4, rotate: -90, opacity: 0 }}
+            animate={{
+              x: [f.x0, f.x0 + (f.x1 - f.x0) * 0.3, f.x1],
+              y: [f.y0, Math.min(f.y0, f.y1) - 90, f.y1],
+              scale: [0.4, 1.6, 0.45],
+              rotate: [-90, 20, 0],
+              opacity: [0, 1, 1],
+            }}
+            transition={{ duration: 0.62, ease: "easeInOut" }}
+          >
+            <StarShape filled className="h-full w-full drop-shadow-[0_3px_0_rgb(0_0_0_/_0.35)]" />
+          </motion.div>
+        ))}
         {flyers.map((f) => (
           <motion.div
             key={f.id}
@@ -550,7 +640,15 @@ export function GameScreen({
 
       {(phase === "won" || phase === "done") && <Confetti />}
 
-      <PauseModal open={paused} sound={sound} onToggleSound={toggleSound} onResume={() => setPaused(false)} onQuit={quit} />
+      <PauseModal
+        open={paused}
+        sound={sound}
+        music={music}
+        onToggleSound={toggleSound}
+        onToggleMusic={toggleMusic}
+        onResume={() => setPaused(false)}
+        onQuit={quit}
+      />
       <BuyBoosterModal id={buyAsk} coins={player.coins} busy={buying} onBuy={buyBooster} onClose={() => setBuyAsk(null)} />
       <OutOfMovesModal
         open={phase === "outOfMoves"}
@@ -566,6 +664,7 @@ export function GameScreen({
         level={level}
         stars={win?.stars ?? 1}
         score={frame.score}
+        coins={player.coins}
         finish={finish}
         onNext={() => onExit(level + 1)}
         onMap={() => onExit()}
@@ -579,6 +678,23 @@ export function GameScreen({
         onRetry={() => onExit(level)}
         onMap={() => onExit()}
       />
+    </div>
+  );
+}
+
+/**
+ * Moves bar with the star thresholds: the fill is the moves used so far, and a star goes out
+ * once the fill passes its mark (finish before a mark to keep that star).
+ */
+function StarBar({ width, used, total, marks, lit }: { width: number; used: number; total: number; marks: number[]; lit: number }) {
+  return (
+    <div className="star-bar" style={{ width }}>
+      <div className="star-bar-fill" style={{ width: `${Math.min(100, Math.max(0, (used / Math.max(1, total)) * 100))}%` }} />
+      {marks.map((x, i) => (
+        <div key={i} className={`star-bar-mark ${i + 1 <= lit ? "" : "lost"}`} style={{ left: `${Math.max(4, Math.min(100, x * 100))}%` }}>
+          <StarShape filled className="h-6 w-6 drop-shadow-[0_2px_0_rgb(0_0_0_/_0.35)]" />
+        </div>
+      ))}
     </div>
   );
 }

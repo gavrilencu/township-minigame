@@ -110,7 +110,7 @@ const SHEEN: [number, number, number, number][] = [
 /** Shared gradients and clip paths, rendered once per screen. */
 export function GemDefs() {
   return (
-    <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
+    <svg id="gem-defs" width="0" height="0" style={{ position: "absolute" }} aria-hidden>
       <defs>
         {GEM_COLORS.map((g, i) => (
           <radialGradient key={`b${i}`} id={`pBody${i}`} cx="0.34" cy="0.26" r="0.95">
@@ -245,6 +245,19 @@ function Piece({ color }: { color: number }) {
       {/* crisp glint */}
       <ellipse cx={sx - 8} cy={sy - 8} rx="9" ry="4.5" fill="#fff" opacity="0.85" transform={`rotate(-35 ${sx - 8} ${sy - 8})`} />
     </>
+  );
+}
+
+/** Hidden copies of every piece, read by `lib/sprites.ts` to draw the board bitmaps. */
+export function PieceSources() {
+  return (
+    <div className="pointer-events-none absolute h-0 w-0 overflow-hidden" aria-hidden>
+      {GEM_COLORS.map((_, i) => (
+        <svg key={i} id={`piece-src-${i}`} viewBox="0 0 100 100" width="0" height="0">
+          <Piece color={i} />
+        </svg>
+      ))}
+    </div>
   );
 }
 

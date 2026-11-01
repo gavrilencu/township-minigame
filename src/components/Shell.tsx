@@ -1,8 +1,10 @@
 "use client";
 
-import { Map as MapIcon, Plus, ShoppingBag, Trophy, Users } from "lucide-react";
+import { Plus } from "lucide-react";
+import type { ComponentType } from "react";
 import { play } from "@/lib/sound";
 import { useGame } from "@/lib/store";
+import { FriendsGlyph, MapGlyph, ShopGlyph, TrophyGlyph } from "./art/Icons";
 import { Coin, StarShape } from "./art/Pieces";
 import { Avatar, formatNumber } from "./ui";
 
@@ -11,11 +13,11 @@ export type Tab = "map" | "shop" | "friends" | "ranks";
 /** Width of the left navigation rail, safe area excluded. */
 export const RAIL = 84;
 
-const TABS: { id: Tab; label: string; Icon: typeof MapIcon }[] = [
-  { id: "map", label: "Hartă", Icon: MapIcon },
-  { id: "shop", label: "Magazin", Icon: ShoppingBag },
-  { id: "friends", label: "Prieteni", Icon: Users },
-  { id: "ranks", label: "Clasament", Icon: Trophy },
+const TABS: { id: Tab; label: string; Icon: ComponentType<{ className?: string }> }[] = [
+  { id: "map", label: "Hartă", Icon: MapGlyph },
+  { id: "shop", label: "Magazin", Icon: ShopGlyph },
+  { id: "friends", label: "Prieteni", Icon: FriendsGlyph },
+  { id: "ranks", label: "Clasament", Icon: TrophyGlyph },
 ];
 
 export function SideRail({ tab, onTab, onProfile }: { tab: Tab; onTab: (t: Tab) => void; onProfile: () => void }) {
@@ -47,10 +49,10 @@ export function SideRail({ tab, onTab, onProfile }: { tab: Tab; onTab: (t: Tab) 
                 onTab(id);
               }}
               className={`relative flex w-full flex-1 flex-col items-center justify-center gap-0.5 rounded-[18px] transition-colors ${
-                active ? "bg-gradient-to-b from-[#ffd567] to-[#f59f1a] text-white shadow-[0_3px_0_#b86a0a]" : "text-white/75"
+                active ? "bg-gradient-to-b from-[#ffd567] to-[#f59f1a] text-white shadow-[0_3px_0_#b86a0a]" : "text-white/80"
               }`}
             >
-              <Icon className="h-6 w-6" strokeWidth={active ? 2.6 : 2.2} />
+              <Icon className={`h-8 w-8 transition-transform ${active ? "scale-110" : "opacity-85"}`} />
               <span className="text-[10.5px] font-bold">{label}</span>
               {id === "shop" && player.dailyAvailable && (
                 <span className="absolute right-2 top-1.5 h-2.5 w-2.5 rounded-full bg-[#ff4d6d] ring-2 ring-white" />

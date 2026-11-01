@@ -6,6 +6,7 @@ import type { FriendDTO, LevelResultDTO, PlayerDTO } from "./shared";
 
 export const USERNAME_KEY = "djesi.username";
 const SOUND_KEY = "djesi.sound";
+const MUSIC_KEY = "djesi.music";
 
 export interface Toast {
   id: number;
@@ -18,6 +19,7 @@ interface State {
   results: Record<number, LevelResultDTO>;
   friends: FriendDTO[];
   sound: boolean;
+  music: boolean;
   toasts: Toast[];
   setSession: (player: PlayerDTO, results: LevelResultDTO[]) => void;
   setPlayer: (player: PlayerDTO) => void;
@@ -25,6 +27,7 @@ interface State {
   setFriends: (f: FriendDTO[]) => void;
   spendBoosterLocal: (id: InGameBooster) => void;
   toggleSound: () => void;
+  toggleMusic: () => void;
   toast: (text: string, tone?: Toast["tone"]) => void;
   dismiss: (id: number) => void;
   logout: () => void;
@@ -32,19 +35,26 @@ interface State {
 
 let toastId = 1;
 
-function readSound(): boolean {
+function readFlag(key: string): boolean {
   try {
-    return localStorage.getItem(SOUND_KEY) !== "off";
+    return localStorage.getItem(key) !== "off";
   } catch {
     return true;
   }
+}
+
+function writeFlag(key: string, on: boolean) {
+  try {
+    localStorage.setItem(key, on ? "on" : "off");
+  } catch {}
 }
 
 export const useGame = create<State>((set, get) => ({
   player: null,
   results: {},
   friends: [],
-  sound: typeof window === "undefined" ? true : readSound(),
+  sound: typeof window === "undefined" ? true : readFlag(SOUND_KEY),
+  music: typeof window === "undefined" ? true : readFlag(MUSIC_KEY),
   toasts: [],
   setSession: (player, results) => {
     try {
@@ -61,10 +71,13 @@ export const useGame = create<State>((set, get) => ({
   },
   toggleSound: () => {
     const sound = !get().sound;
-    try {
-      localStorage.setItem(SOUND_KEY, sound ? "on" : "off");
-    } catch {}
+    writeFlag(SOUND_KEY, sound);
     set({ sound });
+  },
+  toggleMusic: () => {
+    const music = !get().music;
+    writeFlag(MUSIC_KEY, music);
+    set({ music });
   },
   toast: (text, tone = "info") => {
     const id = toastId++;

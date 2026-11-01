@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Check, Gift, HelpCircle, Loader2, LogOut, Play, UserMinus, Volume2, VolumeX } from "lucide-react";
+import { Check, Gift, HelpCircle, Loader2, LogOut, Music, Play, UserMinus, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { BOOSTERS, DAILY_REWARDS, PRE_BOOSTERS, type PreBooster } from "@/lib/game/economy";
@@ -9,7 +9,8 @@ import { generateLevel } from "@/lib/game/levels";
 import { AVATARS, assistMoves, type FriendDTO, type LevelScoreRow } from "@/lib/shared";
 import { play } from "@/lib/sound";
 import { useGame } from "@/lib/store";
-import type { GoalKind } from "@/lib/game/types";
+import type { GoalKind, LevelConfig } from "@/lib/game/types";
+import { AvatarArt } from "./art/Avatars";
 import { Coin, GoalIcon, StarShape } from "./art/Pieces";
 import { HowToPlay } from "./game/HowToPlay";
 import { InstallButton } from "./OrientationGate";
@@ -23,6 +24,39 @@ const INTRO: Record<string, { title: string; text: string }> = {
   grass: { title: "Nou: Iarbă", text: "Potrivirile care ating iarba o întind pe toate piesele potrivite. Acoperă toată tabla!" },
   special: { title: "Nou: Obiective speciale", text: "Creează piesele cerute: 4 în linie = rachetă, L sau T = bombă, pătrat = avion, 5 în linie = glob." },
 };
+
+const PREVIEW: Record<string, string> = {
+  crate: "#e8a85a",
+  cloud: "#ffb3da",
+  ice: "#bfe6ff",
+  lock: "#8d96b3",
+  grass: "#5ad04a",
+};
+
+/** Tiny map of the level: where the holes, crates, ice, chains and grass are. */
+function BoardPreview({ cfg }: { cfg: LevelConfig }) {
+  const rows = cfg.mask.length;
+  const cols = cfg.mask[0].length;
+  const key = (r: number, c: number) => `${r},${c}`;
+  const marks = new Map<string, string>();
+  for (const p of cfg.grass) marks.set(key(p.r, p.c), PREVIEW.grass);
+  for (const p of cfg.locks) marks.set(key(p.r, p.c), PREVIEW.lock);
+  for (const i of cfg.ice) marks.set(key(i.r, i.c), PREVIEW.ice);
+  for (const b of cfg.blockers) marks.set(key(b.r, b.c), PREVIEW[b.kind]);
+  const cell = Math.min(9, Math.floor(150 / cols));
+  return (
+    <div className="mx-auto mt-2 rounded-lg p-1" style={{ background: "#9fa9dc", width: "fit-content" }}>
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, ${cell}px)`, gap: 1 }}>
+        {Array.from({ length: rows * cols }, (_, i) => {
+          const r = Math.floor(i / cols);
+          const c = i % cols;
+          const exists = cfg.mask[r][c];
+          return <span key={i} className="rounded-[2px]" style={{ width: cell, height: cell, background: exists ? (marks.get(key(r, c)) ?? "#c6cdf1") : "transparent" }} />;
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function LevelStartModal({
   level,
@@ -124,6 +158,7 @@ function LevelStartBody({ level, onPlay }: { level: number; onPlay: (level: numb
           în <span className="text-[#7a3fe0]">{cfg.moves + bonus}</span> mutări
           {bonus > 0 && <span className="ml-1 text-[13px] font-bold text-[#2b8a3e]">(+{bonus} bonus)</span>}
         </p>
+        <BoardPreview cfg={cfg} />
         {intro && (
           <div className="mt-2 flex items-center gap-3 rounded-2xl bg-[#e7f5ff] p-2.5">
             <GoalIcon kind={cfg.intro === "special" ? "special" : (cfg.intro as GoalKind)} special="bomb" className="h-11 w-11 shrink-0" />
@@ -284,7 +319,9 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const player = useGame((s) => s.player)!;
   const sound = useGame((s) => s.sound);
+  const music = useGame((s) => s.music);
   const toggleSound = useGame((s) => s.toggleSound);
+  const toggleMusic = useGame((s) => s.toggleMusic);
   const setPlayer = useGame((s) => s.setPlayer);
   const logout = useGame((s) => s.logout);
   const toast = useGame((s) => s.toast);
@@ -345,19 +382,23 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
                 <button
                   key={a}
                   onClick={() => changeAvatar(a)}
-                  className={`flex aspect-square items-center justify-center rounded-xl text-[22px] ${
+                  className={`flex aspect-square items-center justify-center rounded-xl p-0.5 ${
                     player.avatar === a ? "bg-[#ffd23f] shadow-[0_3px_0_#c98a2b]" : "bg-white/70"
                   }`}
+                  aria-label="Avatar"
                 >
-                  {a}
+                  <AvatarArt emoji={a} className="h-full w-full" />
                 </button>
               ))}
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-2.5">
-              <button onClick={toggleSound} className="btn btn-blue h-12 text-[16px]">
-                {sound ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />} {sound ? "Sunet pornit" : "Sunet oprit"}
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <button onClick={toggleSound} className={`btn h-12 text-[15px] ${sound ? "btn-blue" : "btn-purple"}`}>
+                {sound ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />} {sound ? "Sunet" : "Mut"}
               </button>
-              <button onClick={() => setHelp(true)} className="btn btn-gold h-12 text-[16px]">
+              <button onClick={toggleMusic} className={`btn h-12 text-[15px] ${music ? "btn-blue" : "btn-purple"}`}>
+                <Music className="h-5 w-5" /> {music ? "Muzică" : "Fără"}
+              </button>
+              <button onClick={() => setHelp(true)} className="btn btn-gold h-12 text-[15px]">
                 <HelpCircle className="h-5 w-5" /> Ajutor
               </button>
             </div>

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { AVATARS, normalizeUsername, USERNAME_RULES } from "@/lib/shared";
 import { play, unlockAudio } from "@/lib/sound";
 import { useGame } from "@/lib/store";
+import { AvatarArt } from "./art/Avatars";
 import { Gem, GemDefs } from "./art/Pieces";
 import { InstallButton } from "./OrientationGate";
 
@@ -108,11 +109,12 @@ export function Onboarding() {
                   play("tap");
                   setAvatar(a);
                 }}
-                className={`flex aspect-square items-center justify-center rounded-xl text-[24px] transition ${
+                className={`flex aspect-square items-center justify-center rounded-xl p-0.5 transition ${
                   avatar === a ? "scale-110 bg-[#ffd23f] shadow-[0_3px_0_#c98a2b]" : "bg-white/70"
                 }`}
+                aria-label="Avatar"
               >
-                {a}
+                <AvatarArt emoji={a} className="h-full w-full" />
               </button>
             ))}
           </div>

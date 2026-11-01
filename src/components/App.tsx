@@ -1,11 +1,13 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { registerServiceWorker } from "@/lib/pwa";
 import type { PreBooster } from "@/lib/game/economy";
 import type { FriendDTO } from "@/lib/shared";
+import { startMusic, stopMusic } from "@/lib/music";
 import { setSoundEnabled, unlockAudio } from "@/lib/sound";
 import { useGame, USERNAME_KEY } from "@/lib/store";
 import { GemDefs } from "./art/Pieces";
@@ -41,13 +43,17 @@ async function restoreSession(): Promise<Restored> {
   }
 }
 
+const TAB_ORDER: Tab[] = ["map", "shop", "friends", "ranks"];
+
 export default function App() {
   const player = useGame((s) => s.player);
   const sound = useGame((s) => s.sound);
+  const music = useGame((s) => s.music);
   const setSession = useGame((s) => s.setSession);
   const setFriends = useGame((s) => s.setFriends);
   const [boot, setBoot] = useState<Boot>({ state: "loading" });
   const [tab, setTab] = useState<Tab>("map");
+  const [prevTab, setPrevTab] = useState<Tab>("map");
   const [startLevel, setStartLevel] = useState<number | null>(null);
   const [playing, setPlaying] = useState<{ level: number; pre: PreBooster[]; key: number } | null>(null);
   const [profile, setProfile] = useState(false);
@@ -78,6 +84,12 @@ export default function App() {
   useEffect(() => setSoundEnabled(sound), [sound]);
   useEffect(registerServiceWorker, []);
 
+  // Background music follows the setting and only plays for a signed-in player.
+  useEffect(() => {
+    if (music && player) startMusic();
+    else stopMusic();
+  }, [music, !!player]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const username = player?.username;
   useEffect(() => {
     if (!username) return;
@@ -98,6 +110,13 @@ export default function App() {
     events.forEach((e) => window.addEventListener(e, onGesture, { passive: true }));
     return () => events.forEach((e) => window.removeEventListener(e, onGesture));
   }, []);
+
+  const switchTab = (t: Tab) => {
+    setPrevTab(tab);
+    setTab(t);
+  };
+  // tabs slide from the side they sit on in the rail
+  const dir = TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(prevTab) ? 1 : -1;
 
   return (
     <>
@@ -129,45 +148,77 @@ export default function App() {
 
     if (!player) return <Onboarding />;
 
-    if (playing) {
-      return (
-        <GameScreen
-          key={playing.key}
-          level={playing.level}
-          pre={playing.pre}
-          onExit={(next) => {
-            setPlaying(null);
-            setTab("map");
-            if (next && next <= (useGame.getState().player?.level ?? 1)) setStartLevel(next);
-          }}
-        />
-      );
-    }
-
     return (
-      <div className="fixed inset-0 overflow-hidden bg-[radial-gradient(120%_90%_at_50%_0%,#7b4fd6_0%,#3a1f78_50%,#1b1035_100%)]">
-        <GemDefs />
-        <div className="absolute inset-y-0 right-0" style={{ left: `calc(env(safe-area-inset-left) + ${RAIL}px)` }}>
-          {tab === "map" && <MapScreen onOpenLevel={setStartLevel} onDaily={() => setDaily(true)} />}
-          {tab === "shop" && <ShopScreen onDaily={() => setDaily(true)} />}
-          {tab === "friends" && <FriendsScreen onOpenFriend={setFriend} />}
-          {tab === "ranks" && <LeaderboardScreen />}
-        </div>
-        <SideRail tab={tab} onTab={setTab} onProfile={() => setProfile(true)} />
-        <Resources onShop={() => setTab("shop")} />
+      <AnimatePresence mode="wait" initial={false}>
+        {playing ? (
+          <motion.div
+            key={`game-${playing.key}`}
+            className="fixed inset-0"
+            initial={{ opacity: 0, scale: 1.04 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+          >
+            <GameScreen
+              level={playing.level}
+              pre={playing.pre}
+              onExit={(next) => {
+                setPlaying(null);
+                setTab("map");
+                if (next && next <= (useGame.getState().player?.level ?? 1)) setStartLevel(next);
+              }}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="hub"
+            className="fixed inset-0 overflow-hidden bg-[radial-gradient(120%_90%_at_50%_0%,#7b4fd6_0%,#3a1f78_50%,#1b1035_100%)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <GemDefs />
+            <div className="absolute inset-y-0 right-0" style={{ left: `calc(env(safe-area-inset-left) + ${RAIL}px)` }}>
+              <AnimatePresence mode="wait" initial={false} custom={dir}>
+                <motion.div
+                  key={tab}
+                  custom={dir}
+                  className="absolute inset-0"
+                  variants={{
+                    enter: (d: number) => ({ opacity: 0, y: 18 * d }),
+                    center: { opacity: 1, y: 0 },
+                    exit: (d: number) => ({ opacity: 0, y: -14 * d }),
+                  }}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                >
+                  {tab === "map" && <MapScreen onOpenLevel={setStartLevel} onDaily={() => setDaily(true)} />}
+                  {tab === "shop" && <ShopScreen onDaily={() => setDaily(true)} />}
+                  {tab === "friends" && <FriendsScreen onOpenFriend={setFriend} />}
+                  {tab === "ranks" && <LeaderboardScreen />}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            <SideRail tab={tab} onTab={switchTab} onProfile={() => setProfile(true)} />
+            <Resources onShop={() => switchTab("shop")} />
 
-        <LevelStartModal
-          level={startLevel}
-          onClose={() => setStartLevel(null)}
-          onPlay={(level, pre) => {
-            setStartLevel(null);
-            setPlaying({ level, pre, key: Date.now() });
-          }}
-        />
-        <ProfileModal open={profile} onClose={() => setProfile(false)} />
-        <DailyModal open={daily} onClose={() => setDaily(false)} />
-        <FriendModal friend={friend} onClose={() => setFriend(null)} />
-      </div>
+            <LevelStartModal
+              level={startLevel}
+              onClose={() => setStartLevel(null)}
+              onPlay={(level, pre) => {
+                setStartLevel(null);
+                setPlaying({ level, pre, key: Date.now() });
+              }}
+            />
+            <ProfileModal open={profile} onClose={() => setProfile(false)} />
+            <DailyModal open={daily} onClose={() => setDaily(false)} />
+            <FriendModal friend={friend} onClose={() => setFriend(null)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     );
   }
 }

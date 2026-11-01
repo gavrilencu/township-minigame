@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { BoosterId } from "@/lib/game/economy";
 import { useGame } from "@/lib/store";
 import { play } from "@/lib/sound";
+import { AvatarArt, hasAvatarArt } from "./art/Avatars";
 import { HammerArt, ShuffleArt, SpecialArt } from "./art/Pieces";
 
 export function Modal({
@@ -30,7 +31,7 @@ export function Modal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-[#140a2e]/70 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-[#140a2e]/75" onClick={onClose} />
           <motion.div
             role="dialog"
             className={`panel relative w-full ${wide ? "max-w-[640px]" : "max-w-[400px]"} max-h-[94dvh] overflow-hidden`}
@@ -113,10 +114,10 @@ export function BoosterIcon({ id, className = "h-14 w-14" }: { id: BoosterId; cl
 export function Avatar({ emoji, className = "h-11 w-11 text-2xl", ring = "ring-white" }: { emoji: string; className?: string; ring?: string }) {
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#fff4d6] to-[#ffd98a] ring-[3px] ${ring} ${className}`}
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-b from-[#fff4d6] to-[#ffd98a] ring-[3px] ${ring} ${className}`}
       style={{ boxShadow: "0 3px 0 rgb(0 0 0 / 0.2)" }}
     >
-      <span className="leading-none">{emoji}</span>
+      {hasAvatarArt(emoji) ? <AvatarArt emoji={emoji} className="mt-[6%] h-[90%] w-[90%]" /> : <span className="leading-none">{emoji}</span>}
     </div>
   );
 }

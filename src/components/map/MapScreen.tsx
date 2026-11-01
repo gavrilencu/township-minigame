@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsLeft, Flame, Gift, Lock, Play } from "lucide-react";
+import { ChevronsLeft, Flame, Lock, Play } from "lucide-react";
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import { levelDifficulty } from "@/lib/game/levels";
 import { mulberry32 } from "@/lib/game/rng";
@@ -8,6 +8,9 @@ import type { FriendDTO, LevelResultDTO } from "@/lib/shared";
 import { play } from "@/lib/sound";
 import { useGame } from "@/lib/store";
 import { LEVELS_PER_WORLD, worldOf, worldTheme } from "@/lib/worlds";
+import { GiftGlyph } from "../art/Icons";
+import { Decor, shade } from "../art/MapDecor";
+import { WorldParticles } from "../art/Particles";
 import { StarShape } from "../art/Pieces";
 import { InstallButton } from "../OrientationGate";
 import { Avatar } from "../ui";
@@ -15,6 +18,9 @@ import { Avatar } from "../ui";
 const GAP = 118;
 const FOOT = 170;
 const SEG_W = FOOT + LEVELS_PER_WORLD * GAP;
+const BACK_W = 150;
+/** The far layer scrolls at this fraction of the content, for depth. */
+const PARALLAX = 0.3;
 
 /** x of the i-th node inside a world segment (can go outside the segment for neighbours). */
 const xOf = (i: number) => {
@@ -48,6 +54,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
   const [back, setBack] = useState(2);
   const firstWorld = Math.max(1, worldOf(current) - back);
   const shift = useRef(0);
+  const raf = useRef(0);
 
   // Keep the view still when earlier worlds are added on the left.
   useLayoutEffect(() => {
@@ -63,10 +70,12 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
     const a = sc.getBoundingClientRect();
     const b = node.getBoundingClientRect();
     sc.scrollLeft += b.left + b.width / 2 - (a.left + a.width / 2);
+    sc.style.setProperty("--sx", String(sc.scrollLeft));
   }, []);
 
   const friendsAt = new Map<number, FriendDTO[]>();
   for (const f of friends) friendsAt.set(f.level, [...(friendsAt.get(f.level) ?? []), f]);
+  const left0 = firstWorld > 1 ? BACK_W : 0;
 
   return (
     <div className="relative h-full">
@@ -75,6 +84,11 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
         className="no-scrollbar flex h-full overflow-x-auto overflow-y-hidden overscroll-contain"
         onWheel={(e) => {
           if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
+        }}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          cancelAnimationFrame(raf.current);
+          raf.current = requestAnimationFrame(() => el.style.setProperty("--sx", String(el.scrollLeft)));
         }}
       >
         {firstWorld > 1 && (
@@ -99,6 +113,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
           <WorldSegment
             key={w}
             world={w}
+            segLeft={left0 + (w - firstWorld) * SEG_W}
             current={current}
             results={results}
             friendsAt={friendsAt}
@@ -133,7 +148,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
           className="wiggle absolute bottom-[max(env(safe-area-inset-bottom),12px)] left-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-[#ff8ad8] to-[#d6336c] shadow-[0_4px_0_#9c1f4f]"
           aria-label="Cadou zilnic"
         >
-          <Gift className="h-8 w-8 text-white" strokeWidth={2.4} />
+          <GiftGlyph className="h-10 w-10" />
           <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full border-2 border-white bg-[#ffd23f]" />
         </button>
       )}
@@ -143,6 +158,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
 
 const WorldSegment = memo(function WorldSegment({
   world,
+  segLeft,
   current,
   results,
   friendsAt,
@@ -151,6 +167,8 @@ const WorldSegment = memo(function WorldSegment({
   onOpenLevel,
 }: {
   world: number;
+  /** x of this segment inside the scroll content */
+  segLeft: number;
   current: number;
   results: Record<number, LevelResultDTO>;
   friendsAt: Map<number, FriendDTO[]>;
@@ -164,44 +182,99 @@ const WorldSegment = memo(function WorldSegment({
   for (let i = -1; i <= LEVELS_PER_WORLD + 1; i++) pts.push([xOf(i), yOf(start + i)]);
   const d = smoothPath(pts);
   const rng = mulberry32(world * 977);
-  const decor = Array.from({ length: 16 }, (_, i) => ({
-    emoji: theme.decor[i % theme.decor.length],
-    left: FOOT + rng() * (SEG_W - FOOT - 40),
-    top: rng() < 0.5 ? 6 + rng() * 14 : 80 + rng() * 10,
+  // near props along the bottom band, far props (smaller) on the hill line
+  const near = Array.from({ length: 18 }, (_, i) => ({
+    kind: theme.decor[Math.floor(rng() * theme.decor.length)],
+    left: FOOT + 10 + i * ((SEG_W - FOOT - 60) / 18) + rng() * 30,
+    bottom: 0.5 + rng() * 8,
+    size: 46 + rng() * 40,
+    flip: rng() < 0.5,
+  }));
+  const far = Array.from({ length: 14 }, () => ({
+    kind: theme.decor[Math.floor(rng() * theme.decor.length)],
+    left: rng() * SEG_W * 1.3,
+    top: 34 + rng() * 7,
     size: 26 + rng() * 18,
-    rot: -15 + rng() * 30,
   }));
   const locked = start > current;
+  const farW = SEG_W * (1 + PARALLAX);
+  const leafLight = shade(theme.hillNear, 0.3);
 
   return (
     <section
-      className="map-segment relative h-full shrink-0 overflow-visible"
-      style={{ width: SEG_W, background: `linear-gradient(to bottom, ${theme.skyTop} 0%, ${theme.skyBottom} 55%, ${theme.hillFar} 100%)` }}
+      className="map-segment relative h-full shrink-0"
+      style={{ width: SEG_W, background: `linear-gradient(to bottom, ${theme.skyTop} 0%, ${theme.skyBottom} 60%, ${shade(theme.skyBottom, 0.25)} 100%)` }}
     >
+      {/* far layer: sun or moon, clouds and distant hills, moving slower than the path */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          className="absolute inset-y-0"
+          style={{ left: -SEG_W * PARALLAX, width: farW, transform: `translateX(calc((var(--sx, 0) - ${segLeft}) * ${PARALLAX}px))` }}
+        >
+          <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${farW} 100`} preserveAspectRatio="none" aria-hidden>
+            <path
+              d={`M0 52 Q${farW * 0.12} 40 ${farW * 0.25} 48 T${farW * 0.5} 46 T${farW * 0.75} 49 T${farW} 47 V100 H0 Z`}
+              fill={theme.hillFar}
+              opacity="0.9"
+            />
+          </svg>
+          {theme.night ? (
+            <div className="absolute right-[18%] top-[8%] h-16 w-16 rounded-full bg-[#fff6d2] shadow-[0_0_40px_14px_rgb(255_246_210_/_0.35)]">
+              <div className="absolute left-5 -top-1 h-14 w-14 rounded-full" style={{ background: theme.skyTop }} />
+            </div>
+          ) : (
+            <div className="absolute right-[18%] top-[6%] h-20 w-20 rounded-full bg-[#fff3b0] shadow-[0_0_60px_24px_rgb(255_240_170_/_0.5)]" />
+          )}
+          {[0.1, 0.45, 0.8].map((x, i) => (
+            <div
+              key={i}
+              className={`absolute ${["cloud-drift-a", "cloud-drift-b", "cloud-drift-c"][i]}`}
+              style={{ left: `${x * 100}%`, top: `${8 + i * 9}%`, opacity: theme.night ? 0.25 : 0.9 }}
+            >
+              <div className="relative h-8 w-24">
+                <div className="absolute inset-x-0 bottom-0 h-5 rounded-full bg-white" />
+                <div className="absolute left-4 top-0 h-7 w-7 rounded-full bg-white" />
+                <div className="absolute left-11 -top-1 h-9 w-9 rounded-full bg-white" />
+              </div>
+            </div>
+          ))}
+          {far.map((x, i) => (
+            <div key={i} className="absolute" style={{ left: x.left, top: `${x.top}%`, width: x.size, height: x.size, opacity: 0.8 }}>
+              <Decor kind={x.kind} color={shade(theme.hillFar, -0.2)} className="h-full w-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* near hills and ground */}
       <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${SEG_W} 100`} preserveAspectRatio="none" aria-hidden>
-        <path d={`M0 62 Q${SEG_W * 0.15} 48 ${SEG_W * 0.3} 58 T${SEG_W * 0.6} 56 T${SEG_W} 60 V100 H0 Z`} fill={theme.hillFar} />
-        <path d={`M0 76 Q${SEG_W * 0.2} 66 ${SEG_W * 0.4} 74 T${SEG_W * 0.8} 72 T${SEG_W} 75 V100 H0 Z`} fill={theme.hillNear} />
-        <path d={`M0 90 Q${SEG_W * 0.25} 85 ${SEG_W * 0.5} 89 T${SEG_W} 88 V100 H0 Z`} fill={theme.ground} />
+        <path d={`M0 66 Q${SEG_W * 0.2} 56 ${SEG_W * 0.4} 64 T${SEG_W * 0.8} 62 T${SEG_W} 65 V100 H0 Z`} fill={theme.hillNear} />
+        <path d={`M0 66 Q${SEG_W * 0.2} 56 ${SEG_W * 0.4} 64 T${SEG_W * 0.8} 62 T${SEG_W} 65 V72 H0 Z`} fill={leafLight} opacity="0.35" />
+        <path d={`M0 88 Q${SEG_W * 0.25} 83 ${SEG_W * 0.5} 87 T${SEG_W} 86 V100 H0 Z`} fill={theme.ground} />
       </svg>
 
-      {decor.map((x, i) => (
-        <span
+      <WorldParticles kind={theme.particles} seed={world} count={10} />
+
+      {/* cobbled path */}
+      <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${SEG_W} 100`} preserveAspectRatio="none" aria-hidden>
+        <path d={d} fill="none" stroke="rgb(0 0 0 / 0.2)" strokeWidth="30" strokeLinecap="round" vectorEffect="non-scaling-stroke" transform="translate(0 1.4)" />
+        <path d={d} fill="none" stroke={shade(theme.path, -0.18)} strokeWidth="28" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <path d={d} fill="none" stroke={theme.path} strokeWidth="22" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity="0.9" />
+        <path d={d} fill="none" stroke={shade(theme.path, -0.25)} strokeWidth="6" strokeDasharray="1 14" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity="0.8" />
+      </svg>
+
+      {near.map((x, i) => (
+        <div
           key={i}
-          className="pointer-events-none absolute select-none"
-          style={{ left: x.left, top: `${x.top}%`, fontSize: x.size, transform: `rotate(${x.rot}deg)` }}
+          className="pointer-events-none absolute"
+          style={{ left: x.left, bottom: `${x.bottom}%`, width: x.size, height: x.size, transform: x.flip ? "scaleX(-1)" : undefined }}
         >
-          {x.emoji}
-        </span>
+          <Decor kind={x.kind} color={theme.hillNear} className="h-full w-full drop-shadow-[0_4px_3px_rgb(0_0_0_/_0.25)]" />
+        </div>
       ))}
 
-      <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${SEG_W} 100`} preserveAspectRatio="none" aria-hidden>
-        <path d={d} fill="none" stroke="rgb(0 0 0 / 0.18)" strokeWidth="28" strokeLinecap="round" vectorEffect="non-scaling-stroke" transform="translate(0 1.2)" />
-        <path d={d} fill="none" stroke="rgb(255 255 255 / 0.55)" strokeWidth="24" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        <path d={d} fill="none" stroke={theme.path} strokeWidth="7" strokeDasharray="2 16" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      </svg>
-
       <div className="absolute inset-y-0 left-0 flex w-[170px] items-center justify-center">
-        <div className="glass rounded-3xl px-4 py-3 text-center text-white shadow-lg">
+        <div className="glass-solid rounded-3xl px-4 py-3 text-center text-white shadow-lg">
           <div className="text-[11px] font-bold uppercase tracking-[0.18em] opacity-80">Lumea {world}</div>
           <div className="mt-0.5 text-[17px] leading-tight font-bold">{theme.name}</div>
           <div className="mt-1 text-[12px] opacity-80">
@@ -254,17 +327,17 @@ const LevelNode = memo(function LevelNode({
   onOpen: (n: number) => void;
 }) {
   const diff = levelDifficulty(n);
-  const size = state === "current" ? 64 : 54;
+  const size = state === "current" ? 66 : 56;
   const fill =
     state === "locked"
-      ? "from-[#9aa0c8] to-[#5d6290]"
+      ? "radial-gradient(circle at 35% 28%, #c3c8e6 0%, #8a90bd 45%, #5d6290 100%)"
       : state === "current"
-        ? "from-[#ff8fd0] to-[#b83dd6]"
+        ? "radial-gradient(circle at 35% 28%, #ffc6ea 0%, #ff7bd0 40%, #b83dd6 100%)"
         : diff === "super"
-          ? "from-[#c9a2ff] to-[#7048e8]"
+          ? "radial-gradient(circle at 35% 28%, #e4d2ff 0%, #b48cff 40%, #7048e8 100%)"
           : diff === "hard"
-            ? "from-[#ff9a9a] to-[#e03131]"
-            : "from-[#ffe27a] to-[#f59f00]";
+            ? "radial-gradient(circle at 35% 28%, #ffc9c9 0%, #ff7a7a 40%, #e03131 100%)"
+            : "radial-gradient(circle at 35% 28%, #fff1b3 0%, #ffd23f 40%, #f59f00 100%)";
   const edge =
     state === "locked" ? "#3d4170" : state === "current" ? "#7a1fa2" : diff === "super" ? "#4c2bb0" : diff === "hard" ? "#a51d1d" : "#b86a0a";
   return (
@@ -272,7 +345,7 @@ const LevelNode = memo(function LevelNode({
       {state === "current" && (
         <>
           <span className="pulse-ring absolute inset-0 rounded-full bg-white/60" />
-          <div className="float-bob absolute -top-[56px] left-1/2 -translate-x-1/2">
+          <div className="float-bob absolute -top-[58px] left-1/2 -translate-x-1/2">
             <Avatar emoji={avatar} className="h-11 w-11 text-[26px]" ring="ring-[#ff8fd0]" />
             <div className="mx-auto -mt-0.5 h-0 w-0 border-x-[7px] border-t-[9px] border-x-transparent border-t-[#ff8fd0]" />
           </div>
@@ -285,11 +358,16 @@ const LevelNode = memo(function LevelNode({
           play("tap");
           onOpen(n);
         }}
-        className={`relative flex items-center justify-center rounded-full border-[3px] border-white bg-gradient-to-b ${fill} transition-transform active:scale-90`}
-        style={{ width: size, height: size, boxShadow: `0 5px 0 ${edge}, 0 10px 16px rgb(0 0 0 / 0.3)` }}
+        className="relative flex items-center justify-center rounded-full transition-transform active:scale-90"
+        style={{
+          width: size,
+          height: size,
+          background: fill,
+          boxShadow: `0 5px 0 ${edge}, 0 10px 16px rgb(0 0 0 / 0.3), inset 0 0 0 3px rgb(255 255 255 / 0.85), inset 0 -5px 0 rgb(0 0 0 / 0.12)`,
+        }}
         aria-label={`Nivelul ${n}`}
       >
-        <span className="absolute inset-x-2 top-1 h-[38%] rounded-full bg-white/35" />
+        <span className="absolute inset-x-3 top-1.5 h-[30%] rounded-full bg-white/45" />
         {state === "locked" ? (
           <span className="flex flex-col items-center leading-none text-white/90">
             <Lock className="h-4 w-4" strokeWidth={3} />
@@ -305,7 +383,7 @@ const LevelNode = memo(function LevelNode({
         )}
       </button>
       {state === "done" && (
-        <div className="absolute -bottom-3.5 left-1/2 flex -translate-x-1/2 items-end">
+        <div className="absolute -bottom-2.5 left-1/2 flex -translate-x-1/2 items-end">
           {[1, 2, 3].map((s) => (
             <StarShape key={s} filled={s <= stars} className={s === 2 ? "-mb-1 h-6 w-6" : "h-5 w-5"} />
           ))}
