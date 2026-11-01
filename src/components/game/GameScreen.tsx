@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useAnimate } from "motion/react";
-import { Check, Pause, Plus, X } from "lucide-react";
+import { Check, Plus, Settings, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import {
@@ -363,63 +363,56 @@ export function GameScreen({
       <GemDefs />
 
       <div className="absolute inset-0 flex gap-2 pb-[max(env(safe-area-inset-bottom),6px)] pl-[max(env(safe-area-inset-left),8px)] pr-[max(env(safe-area-inset-right),8px)] pt-[max(env(safe-area-inset-top),6px)]">
-        {/* Left: goals and moves */}
-        <aside className="z-10 flex w-[128px] shrink-0 flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => {
-                play("tap");
-                setPaused(true);
-              }}
-              className="glass flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white active:scale-95"
-              aria-label="Pauză"
-            >
-              <Pause className="h-5 w-5 fill-white" />
-            </button>
-            <div className="min-w-0 leading-tight text-white drop-shadow-[0_2px_0_rgb(0_0_0_/_0.35)]">
-              <div className="text-[15px] font-bold">Nivelul {level}</div>
-              {cfg.difficulty !== "normal" && (
-                <span className={`rounded-full px-1.5 text-[10px] font-bold ${cfg.difficulty === "super" ? "bg-[#7048e8]" : "bg-[#e03131]"}`}>
-                  {cfg.difficulty === "super" ? "SUPER GREU" : "GREU"}
-                </span>
-              )}
-            </div>
+        {/* Left: wooden sign with the goals and the moves */}
+        <aside className="z-10 flex w-[132px] shrink-0 flex-col gap-1.5">
+          <div className="flex h-9 items-center gap-1.5 px-1 leading-tight text-white drop-shadow-[0_2px_0_rgb(0_0_0_/_0.35)]">
+            <div className="text-[15px] font-bold">Nivelul {level}</div>
+            {cfg.difficulty !== "normal" && (
+              <span className={`rounded-full px-1.5 text-[10px] font-bold ${cfg.difficulty === "super" ? "bg-[#7048e8]" : "bg-[#e03131]"}`}>
+                {cfg.difficulty === "super" ? "SUPER GREU" : "GREU"}
+              </span>
+            )}
           </div>
 
-          <div className="panel flex min-h-0 flex-1 flex-col rounded-[20px]! px-1.5 py-1.5">
-            <div className="text-center text-[11px] font-bold uppercase tracking-wide text-ink-soft">Obiective</div>
-            <div className={`grid flex-1 content-center gap-x-1 gap-y-1.5 ${frame.goals.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-              {frame.goals.map((g, i) => (
-                <div key={i} ref={(el) => void (goalRefs.current[i] = el)} className="relative flex flex-col items-center">
-                  <GoalIcon kind={g.kind} color={g.color} special={g.special} className="h-9 w-9" />
-                  {g.remaining > 0 ? (
-                    <motion.span key={g.remaining} initial={{ scale: 1.6 }} animate={{ scale: 1 }} className="text-[16px] leading-tight font-bold">
-                      {g.remaining}
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#2f9e44]"
-                    >
-                      <Check className="h-3.5 w-3.5 text-white" strokeWidth={4} />
-                    </motion.span>
-                  )}
-                </div>
-              ))}
+          <div className="wood flex min-h-0 flex-1 flex-col p-2 pb-1.5">
+            <div className="wood-inner flex min-h-0 flex-1 flex-col justify-center rounded-[20px_20px_16px_16px]! px-1 py-2">
+              <div className={`grid content-center gap-x-5 gap-y-4 ${frame.goals.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                {frame.goals.map((g, i) => (
+                  <div key={i} ref={(el) => void (goalRefs.current[i] = el)} className="relative mx-auto h-10 w-10">
+                    <GoalIcon kind={g.kind} color={g.color} special={g.special} className="h-10 w-10" />
+                    {g.remaining > 0 ? (
+                      <motion.span
+                        key={g.remaining}
+                        initial={{ scale: 1.6 }}
+                        animate={{ scale: 1 }}
+                        className="hud-badge absolute -right-3 -bottom-2 text-[19px] leading-none font-bold"
+                      >
+                        {g.remaining}
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -right-2 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[#2f9e44]"
+                      >
+                        <Check className="h-3.5 w-3.5 text-white" strokeWidth={4} />
+                      </motion.span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className={`panel flex flex-col items-center rounded-[20px]! py-1 ${lowMoves ? "animate-pulse" : ""}`}>
-            <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">Mutări</span>
-            <motion.span
-              key={movesLeft}
-              initial={{ scale: 1.4 }}
-              animate={{ scale: 1 }}
-              className={`text-[30px] leading-none font-bold ${lowMoves ? "text-[#e03131]" : "text-ink"}`}
-            >
-              {movesLeft}
-            </motion.span>
+            <div className={`flex flex-col items-center pt-1.5 leading-none ${lowMoves ? "low-moves" : ""}`}>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#8a4a1c]">Mutări</span>
+              <motion.span
+                key={movesLeft}
+                initial={{ scale: 1.4 }}
+                animate={{ scale: 1 }}
+                className={`hud-num mt-0.5 text-[32px] leading-none font-bold ${lowMoves ? "text-[#d32424]!" : ""}`}
+              >
+                {movesLeft}
+              </motion.span>
+            </div>
           </div>
 
           <div className="glass flex items-center justify-between rounded-2xl px-2 py-1 text-white">
@@ -489,34 +482,48 @@ export function GameScreen({
           </AnimatePresence>
         </main>
 
-        {/* Right: boosters */}
-        <aside className="z-10 flex w-[74px] shrink-0 flex-col justify-center">
-          <div className="glass flex flex-col items-center gap-3 rounded-[26px] px-1.5 py-3">
-            {INGAME_BOOSTERS.map((id) => {
-              const n = player.boosters[id] ?? 0;
-              const active = booster === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => pickBooster(id)}
-                  disabled={phase !== "play" && !active}
-                  className={`relative transition-transform active:scale-90 disabled:opacity-60 ${active ? "-translate-x-1.5 scale-110" : ""}`}
-                  aria-label={BOOSTERS[id].name}
-                >
-                  <div className={`rounded-full ${active ? "ring-4 ring-[#ffd23f]" : ""}`}>
-                    <BoosterIcon id={id} className="h-[52px] w-[52px]" />
-                  </div>
-                  <span
-                    className={`absolute -bottom-1 -right-1 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-white px-1 text-[12px] font-bold text-white ${
-                      n > 0 ? "bg-[#2f9e44]" : "bg-[#f08c00]"
-                    }`}
+        {/* Right: settings and the wooden tool board */}
+        <aside className="z-10 flex w-[86px] shrink-0 flex-col items-center">
+          <button
+            onClick={() => {
+              play("tap");
+              setPaused(true);
+            }}
+            className="puck flex h-10 w-10 shrink-0 items-center justify-center text-white"
+            aria-label="Pauză"
+          >
+            <Settings className="h-6 w-6 drop-shadow-[0_2px_0_rgba(0,40,100,0.45)]" strokeWidth={2.6} />
+          </button>
+          <div className="flex min-h-0 flex-1 items-center">
+            <div className="wood flex flex-col items-center gap-3 px-2 py-3">
+              {INGAME_BOOSTERS.map((id) => {
+                const n = player.boosters[id] ?? 0;
+                const active = booster === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => pickBooster(id)}
+                    disabled={phase !== "play" && !active}
+                    className={`relative transition-transform disabled:opacity-60 ${active ? "-translate-x-1.5 scale-110" : ""}`}
+                    aria-label={BOOSTERS[id].name}
                   >
-                    {n > 0 ? n : <Plus className="h-3.5 w-3.5" strokeWidth={4} />}
-                  </span>
-                </button>
-              );
-            })}
+                    <div className={`rounded-full ${active ? "ring-4 ring-[#ffd23f]" : ""}`}>
+                      <BoosterIcon id={id} className="h-[54px] w-[54px]" />
+                    </div>
+                    <span
+                      className={`absolute -right-1.5 -bottom-1 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-white px-1 text-[13px] font-bold text-white ${
+                        n > 0 ? "bg-[#e8352f]" : "bg-[#36b54a]"
+                      }`}
+                      style={{ boxShadow: "0 2px 0 rgb(0 0 0 / 0.25)" }}
+                    >
+                      {n > 0 ? n : <Plus className="h-3.5 w-3.5" strokeWidth={4} />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+          <div className="h-10 shrink-0" />
         </aside>
       </div>
 

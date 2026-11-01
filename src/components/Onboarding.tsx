@@ -64,7 +64,7 @@ export function Onboarding() {
         <div className="flex flex-1 flex-col items-center">
           <Logo />
           <p className="mt-3 max-w-[340px] text-center text-[16px] font-medium text-white/85">
-            Potrivește bomboane, sparge obstacole, urcă nivel după nivel — la infinit.
+            Potrivește piese, sparge obstacole, urcă nivel după nivel — la infinit.
           </p>
           <InstallButton className="mt-4 h-11 px-5 text-[16px]" />
         </div>

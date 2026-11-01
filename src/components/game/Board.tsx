@@ -39,10 +39,11 @@ export function Board({ frame, S, effects, selected, hint, targeting, boardRef, 
   const H = rows * S;
   const maskKey = cells.map((row) => row.map((c) => (c.exists ? 1 : 0)).join("")).join("|");
 
+  const RIM = Math.max(4, Math.round(S * 0.12));
   const { clip, slots } = useMemo(() => {
     const exists = (r: number, c: number) => !!cells[r]?.[c]?.exists;
     let path = "";
-    const slots: { r: number; c: number; radius: string }[] = [];
+    const slots: { r: number; c: number; radius: string; rim: string }[] = [];
     const R = Math.round(S * 0.3);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -52,8 +53,10 @@ export function Board({ frame, S, effects, selected, hint, targeting, boardRef, 
         const down = exists(r + 1, c);
         const left = exists(r, c - 1);
         const right = exists(r, c + 1);
-        const rad = (a: boolean, b: boolean) => (!a && !b ? `${R}px` : "0");
-        slots.push({ r, c, radius: `${rad(up, left)} ${rad(up, right)} ${rad(down, right)} ${rad(down, left)}` });
+        const rad = (a: boolean, b: boolean, extra: number) => (!a && !b ? `${R + extra}px` : "0");
+        const corners = (extra: number) =>
+          `${rad(up, left, extra)} ${rad(up, right, extra)} ${rad(down, right, extra)} ${rad(down, left, extra)}`;
+        slots.push({ r, c, radius: corners(0), rim: corners(RIM) });
       }
     }
     return { clip: path, slots };
@@ -115,33 +118,34 @@ export function Board({ frame, S, effects, selected, hint, targeting, boardRef, 
       }}
       onPointerCancel={() => (start.current = null)}
     >
-      {/* Board shape with a white outline */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          filter:
-            "drop-shadow(3px 0 0 #fff) drop-shadow(-3px 0 0 #fff) drop-shadow(0 3px 0 #fff) drop-shadow(0 -3px 0 #fff) drop-shadow(0 8px 14px rgb(20 30 80 / 0.45))",
-        }}
-      >
-        {slots.map(({ r, c, radius }) => (
+      {/* Tray: a darker rim with a soft shadow, the tray face, then the lighter cells */}
+      <div className="pointer-events-none absolute inset-0" style={{ filter: "drop-shadow(0 10px 14px rgb(25 30 90 / 0.4))" }}>
+        {slots.map(({ r, c, rim }) => (
           <div
-            key={`s${r}-${c}`}
+            key={`r${r}-${c}`}
             className="absolute"
-            style={{ left: c * S, top: r * S, width: S + 0.5, height: S + 0.5, background: "#8fabe6", borderRadius: radius }}
+            style={{ left: c * S - RIM, top: r * S - RIM, width: S + RIM * 2 + 0.5, height: S + RIM * 2 + 0.5, background: "#9fa9dc", borderRadius: rim }}
           />
         ))}
       </div>
+      {slots.map(({ r, c, radius }) => (
+        <div
+          key={`s${r}-${c}`}
+          className="pointer-events-none absolute"
+          style={{ left: c * S, top: r * S, width: S + 0.5, height: S + 0.5, background: "#b5bde8", borderRadius: radius }}
+        />
+      ))}
       {slots.map(({ r, c }) => (
         <div
           key={`i${r}-${c}`}
-          className="pointer-events-none absolute rounded-[24%]"
+          className="pointer-events-none absolute rounded-[20%]"
           style={{
-            left: c * S + 1.5,
-            top: r * S + 1.5,
-            width: S - 3,
-            height: S - 3,
-            background: (r + c) % 2 ? "#bcd1f7" : "#c9dafa",
-            boxShadow: "inset 0 -3px 0 rgb(80 110 190 / 0.25), inset 0 2px 0 rgb(255 255 255 / 0.6)",
+            left: c * S + 2,
+            top: r * S + 2,
+            width: S - 4,
+            height: S - 4,
+            background: (r + c) % 2 ? "#c0c8ee" : "#c6cdf1",
+            boxShadow: "inset 0 1.5px 0 rgb(255 255 255 / 0.4), inset 0 -2px 0 rgb(70 80 160 / 0.14)",
           }}
         />
       ))}

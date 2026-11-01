@@ -1,12 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Hammer, Shuffle, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { BoosterId } from "@/lib/game/economy";
 import { useGame } from "@/lib/store";
 import { play } from "@/lib/sound";
-import { SpecialArt } from "./art/Pieces";
+import { HammerArt, ShuffleArt, SpecialArt } from "./art/Pieces";
 
 export function Modal({
   open,
@@ -64,23 +64,22 @@ export function Modal({
   );
 }
 
-const BOOSTER_BG: Record<BoosterId, string> = {
-  hammer: "from-[#ffcf70] to-[#f08a24]",
-  row: "from-[#ff9aa8] to-[#e8435a]",
-  col: "from-[#ff9aa8] to-[#e8435a]",
-  shuffle: "from-[#c7a6ff] to-[#7d4be0]",
-  preRocket: "from-[#ffb199] to-[#ef5b3f]",
-  preBomb: "from-[#9fb4ff] to-[#4357c9]",
-  preRainbow: "from-[#ffe3f7] to-[#c59cff]",
-};
-
+/** Round blue "puck" button holding a booster, as on the in-game tool board. */
 export function BoosterIcon({ id, className = "h-14 w-14" }: { id: BoosterId; className?: string }) {
   const inner = (() => {
     switch (id) {
       case "hammer":
-        return <Hammer className="h-[58%] w-[58%] text-white drop-shadow-[0_2px_0_rgba(0,0,0,0.3)]" strokeWidth={2.6} />;
+        return (
+          <div className="h-[78%] w-[78%]">
+            <HammerArt />
+          </div>
+        );
       case "shuffle":
-        return <Shuffle className="h-[55%] w-[55%] text-white drop-shadow-[0_2px_0_rgba(0,0,0,0.3)]" strokeWidth={2.8} />;
+        return (
+          <div className="h-[72%] w-[72%]">
+            <ShuffleArt />
+          </div>
+        );
       case "row":
       case "preRocket":
         return (
@@ -108,14 +107,7 @@ export function BoosterIcon({ id, className = "h-14 w-14" }: { id: BoosterId; cl
         );
     }
   })();
-  return (
-    <div
-      className={`relative flex items-center justify-center rounded-full bg-gradient-to-b ${BOOSTER_BG[id]} ${className}`}
-      style={{ boxShadow: "inset 0 -4px 0 rgb(0 0 0 / 0.18), inset 0 3px 0 rgb(255 255 255 / 0.5), 0 3px 0 rgb(0 0 0 / 0.2)" }}
-    >
-      {inner}
-    </div>
-  );
+  return <div className={`puck relative flex items-center justify-center ${className}`}>{inner}</div>;
 }
 
 export function Avatar({ emoji, className = "h-11 w-11 text-2xl", ring = "ring-white" }: { emoji: string; className?: string; ring?: string }) {

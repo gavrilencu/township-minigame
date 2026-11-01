@@ -13,7 +13,7 @@ export const BOOSTERS: Record<BoosterId, { name: string; desc: string; price: nu
   hammer: { name: "Ciocan", desc: "Sparge o piesă sau un strat de obstacol. Nu consumă mutări.", price: 90 },
   row: { name: "Rachetă orizontală", desc: "Curăță un rând întreg la alegere.", price: 130 },
   col: { name: "Rachetă verticală", desc: "Curăță o coloană întreagă la alegere.", price: 130 },
-  shuffle: { name: "Amestecă", desc: "Rearanjează bomboanele de pe tablă.", price: 60 },
+  shuffle: { name: "Amestecă", desc: "Rearanjează piesele de pe tablă.", price: 60 },
   preRocket: { name: "Start cu rachetă", desc: "Începi nivelul cu o rachetă pe tablă.", price: 80 },
   preBomb: { name: "Start cu bombă", desc: "Începi nivelul cu o bombă pe tablă.", price: 120 },
   preRainbow: { name: "Start cu glob", desc: "Începi nivelul cu un glob multicolor.", price: 200 },

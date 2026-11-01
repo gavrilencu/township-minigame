@@ -2,122 +2,190 @@ import { memo, type ReactNode } from "react";
 import type { BlockerKind, GoalKind, SpecialKind, Tile } from "@/lib/game/types";
 
 /**
- * Candy palette. `glow` is the light passing through the jelly, `depth` the darkest core
- * (also used for outlines of score popups), `base/light/dark` drive the particles.
+ * Toy-piece palette: chunky glossy shapes with an embossed symbol.
+ * `depth` is the darkest tone (outline, score-popup stroke), `base/light/dark` drive the particles.
  */
 export const GEM_COLORS = [
-  { name: "Inimioară", base: "#f2203f", light: "#ff9fae", dark: "#9c0720", depth: "#5e0412", glow: "#ff6f86", rim: "#ffc2cc" },
-  { name: "Spirală", base: "#2e86ff", light: "#a9d4ff", dark: "#0b44a3", depth: "#05265e", glow: "#78b6ff", rim: "#cfe6ff" },
-  { name: "Steluță", base: "#ffc107", light: "#fff3a6", dark: "#d57800", depth: "#7a4100", glow: "#ffe36b", rim: "#fff7cf" },
-  { name: "Cub", base: "#35c23c", light: "#bdf5a0", dark: "#147523", depth: "#0a4214", glow: "#8be774", rim: "#dcffd0" },
-  { name: "Bob", base: "#a23ae6", light: "#e5b8ff", dark: "#56128f", depth: "#310955", glow: "#cb83ff", rim: "#f0dcff" },
-  { name: "Picătură", base: "#ff8418", light: "#ffd3a1", dark: "#c14700", depth: "#6e2700", glow: "#ffb066", rim: "#ffe6cc" },
+  { name: "Inimă", base: "#ea3d38", light: "#ff9a86", dark: "#ad1c1a", depth: "#5c0b0b" },
+  { name: "Picătură", base: "#2f80f2", light: "#93d2ff", dark: "#1a4db3", depth: "#0b2866" },
+  { name: "Soare", base: "#ffc62a", light: "#fff2a8", dark: "#df8e07", depth: "#874b00" },
+  { name: "Frunză", base: "#41bd3e", light: "#a3ee8a", dark: "#1f7f24", depth: "#0c4511" },
+  { name: "Fulg", base: "#e4eaf5", light: "#ffffff", dark: "#a9b7d6", depth: "#55658b" },
+  { name: "Lună", base: "#a354ea", light: "#dfb8ff", dark: "#6a28b4", depth: "#381064" },
+];
+
+/* ------------------------------------------------------------------ */
+/* Shapes                                                              */
+/* ------------------------------------------------------------------ */
+
+const f = (n: number) => n.toFixed(1);
+
+/** Regular polygon with rounded corners, as an SVG path. */
+function roundPoly(sides: number, radius: number, corner: number, cx = 50, cy = 47, start = -90): string {
+  const pts = Array.from({ length: sides }, (_, i) => {
+    const a = ((start + (i * 360) / sides) * Math.PI) / 180;
+    return [cx + Math.cos(a) * radius, cy + Math.sin(a) * radius];
+  });
+  let d = "";
+  for (let i = 0; i < sides; i++) {
+    const p = pts[i];
+    const prev = pts[(i + sides - 1) % sides];
+    const next = pts[(i + 1) % sides];
+    const to = (q: number[]) => {
+      const dx = q[0] - p[0];
+      const dy = q[1] - p[1];
+      const len = Math.hypot(dx, dy);
+      return [p[0] + (dx / len) * corner, p[1] + (dy / len) * corner];
+    };
+    const a = to(prev);
+    const b = to(next);
+    d += (i ? ` L${f(a[0])} ${f(a[1])}` : `M${f(a[0])} ${f(a[1])}`) + ` Q${f(p[0])} ${f(p[1])} ${f(b[0])} ${f(b[1])}`;
+  }
+  return d + " Z";
+}
+
+const SHAPES = [
+  "M31 8 H69 Q89 8 89 28 V66 Q89 86 69 86 H31 Q11 86 11 66 V28 Q11 8 31 8 Z", // rounded square
+  "M10 47 A40 40 0 1 0 90 47 A40 40 0 1 0 10 47 Z", // circle
+  roundPoly(6, 43, 9), // hexagon
+  roundPoly(4, 45, 11), // diamond
+  roundPoly(8, 42, 8, 50, 47, -90 + 22.5), // octagon
+  roundPoly(5, 44, 10, 50, 49), // pentagon
 ];
 
 const HEART =
   "M50 87 C23 70 9 55 11 37 C13 21 27 12 39 14 C45 15 49 19 50 24 C51 19 55 15 61 14 C73 12 87 21 89 37 C91 55 77 70 50 87 Z";
-const STAR = (() => {
-  const pts: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const r = i % 2 ? 19 : 40;
-    pts.push(`${(50 + Math.cos(a) * r).toFixed(1)},${(52 + Math.sin(a) * r).toFixed(1)}`);
-  }
-  return pts.join(" ");
-})();
-const DROP = "M13 79 C13 43 29 14 50 14 C71 14 87 43 87 79 Q87 87 79 87 H21 Q13 87 13 79 Z";
+const DROP = "M50 8 C50 8 16 46 16 64 A34 34 0 0 0 84 64 C84 46 50 8 50 8 Z";
+const LEAF = "M50 14 C76 20 90 46 78 70 C68 90 40 92 22 78 C8 66 10 40 28 24 C34 18 42 14 50 14 Z";
+const MOON = "M60 16 A32 32 0 1 0 60 80 A40 40 0 0 1 60 16 Z";
 
-/** Curved white stripes of the swirl candy. */
-const SWIRL = Array.from({ length: 6 }, (_, k) => {
-  const a = (k * Math.PI) / 3;
-  const R = 39;
-  const p = (ang: number, r: number) => `${(50 + Math.cos(ang) * r).toFixed(1)} ${(49 + Math.sin(ang) * r).toFixed(1)}`;
-  return `M50 49 Q${p(a + 0.75, 26)} ${p(a, R)} A${R} ${R} 0 0 1 ${p(a + 0.42, R)} Q${p(a + 1.05, 22)} 50 49 Z`;
-});
+/** Centre a 100×100 motif inside the piece at the given scale. */
+const fit = (s: number, cy = 47) => `translate(${50 - 50 * s} ${cy - 50 * s}) scale(${s})`;
 
-/** Shared gradients, patterns and clip paths, rendered once per screen. */
+type Emblem = (color: string, opacity: number) => ReactNode;
+
+const EMBLEMS: Emblem[] = [
+  (c, o) => <path d={HEART} fill={c} opacity={o} transform={fit(0.44)} />,
+  (c, o) => <path d={DROP} fill={c} opacity={o} transform={fit(0.42)} />,
+  (c, o) => (
+    <g fill={c} opacity={o}>
+      <circle cx="50" cy="47" r="10" />
+      {Array.from({ length: 8 }, (_, i) => (
+        <rect key={i} x="47.5" y="27" width="5" height="8" rx="2.5" transform={`rotate(${i * 45} 50 47)`} />
+      ))}
+    </g>
+  ),
+  (c, o) => (
+    <g fill={c} opacity={o} transform={fit(0.44)}>
+      <path d={LEAF} />
+    </g>
+  ),
+  (c, o) => (
+    <g stroke={c} strokeOpacity={o} fill="none" strokeWidth="5.5" strokeLinecap="round">
+      {[0, 60, 120].map((a) => (
+        <g key={a} transform={`rotate(${a} 50 47)`}>
+          <path d="M50 29 V65" />
+          <path d="M44 34 L50 40 L56 34 M44 60 L50 54 L56 60" />
+        </g>
+      ))}
+    </g>
+  ),
+  (c, o) => <path d={MOON} fill={c} opacity={o} transform={fit(0.42, 49)} />,
+];
+
+/** Where the big soft sheen sits for each shape. */
+const SHEEN: [number, number, number, number][] = [
+  [34, 28, 30, 22],
+  [34, 28, 30, 22],
+  [36, 26, 28, 20],
+  [40, 24, 24, 20],
+  [35, 27, 29, 21],
+  [38, 28, 28, 20],
+];
+
+/* ------------------------------------------------------------------ */
+/* Shared defs                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Shared gradients and clip paths, rendered once per screen. */
 export function GemDefs() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
       <defs>
         {GEM_COLORS.map((g, i) => (
-          <radialGradient key={`b${i}`} id={`cBody${i}`} cx="0.36" cy="0.3" r="0.78">
+          <radialGradient key={`b${i}`} id={`pBody${i}`} cx="0.34" cy="0.26" r="0.95">
             <stop offset="0" stopColor={g.light} />
-            <stop offset="0.42" stopColor={g.base} />
-            <stop offset="0.85" stopColor={g.dark} />
-            <stop offset="1" stopColor={g.depth} />
+            <stop offset="0.38" stopColor={g.base} />
+            <stop offset="1" stopColor={g.dark} />
           </radialGradient>
         ))}
-        {GEM_COLORS.map((g, i) => (
-          <radialGradient key={`g${i}`} id={`cGlow${i}`} cx="0.62" cy="0.78" r="0.45">
-            <stop offset="0" stopColor={g.glow} stopOpacity="0.95" />
-            <stop offset="1" stopColor={g.glow} stopOpacity="0" />
-          </radialGradient>
+        {SHAPES.map((d, i) => (
+          <clipPath key={`c${i}`} id={`pClip${i}`}>
+            <path d={d} />
+          </clipPath>
         ))}
-        <radialGradient id="cShadow">
-          <stop offset="0" stopColor="#0d1a4a" stopOpacity="0.42" />
-          <stop offset="1" stopColor="#0d1a4a" stopOpacity="0" />
+        <radialGradient id="pSheen">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.62" />
+          <stop offset="0.55" stopColor="#fff" stopOpacity="0.18" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
         </radialGradient>
-        <linearGradient id="cSpec" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.95" />
-          <stop offset="1" stopColor="#fff" stopOpacity="0.1" />
-        </linearGradient>
-        <radialGradient id="cSphere" cx="0.35" cy="0.3" r="0.75">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.35" />
+        <linearGradient id="pRim" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0.55" stopColor="#fff" stopOpacity="0" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.38" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0.3" />
+        </linearGradient>
+        <radialGradient id="pShadow">
+          <stop offset="0" stopColor="#141a4d" stopOpacity="0.45" />
+          <stop offset="0.6" stopColor="#141a4d" stopOpacity="0.2" />
+          <stop offset="1" stopColor="#141a4d" stopOpacity="0" />
         </radialGradient>
-        <pattern id="cSugar" width="7" height="7" patternUnits="userSpaceOnUse">
-          <circle cx="1.5" cy="1.8" r="0.9" fill="#fff" opacity="0.9" />
-          <circle cx="5.2" cy="4.6" r="0.7" fill="#fff" opacity="0.75" />
-          <rect x="3.6" y="0.8" width="1.1" height="1.1" fill="#fff" opacity="0.6" transform="rotate(30 4 1.3)" />
-        </pattern>
-        <pattern id="cSpeckle" width="11" height="9" patternUnits="userSpaceOnUse">
-          <ellipse cx="2.5" cy="2.5" rx="1.4" ry="1" fill="#3a0a66" opacity="0.55" />
-          <ellipse cx="8" cy="6.5" rx="1.1" ry="0.8" fill="#3a0a66" opacity="0.45" />
-        </pattern>
-        <clipPath id="clipSwirl">
-          <circle cx="50" cy="49" r="39" />
-        </clipPath>
-        <clipPath id="clipCube">
-          <rect x="14" y="14" width="72" height="72" rx="18" />
-        </clipPath>
-        <clipPath id="clipDrop">
-          <path d={DROP} />
-        </clipPath>
         <linearGradient id="rocketBody" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffb0a8" />
-          <stop offset="0.45" stopColor="#ff4040" />
-          <stop offset="1" stopColor="#b3101b" />
+          <stop offset="0" stopColor="#ff9d8f" />
+          <stop offset="0.4" stopColor="#f0392f" />
+          <stop offset="1" stopColor="#a8151a" />
         </linearGradient>
         <linearGradient id="rocketNose" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff6c0" />
-          <stop offset="1" stopColor="#ffae00" />
+          <stop offset="0" stopColor="#fff2a8" />
+          <stop offset="0.5" stopColor="#ffc42a" />
+          <stop offset="1" stopColor="#d98407" />
         </linearGradient>
-        <radialGradient id="bombBody" cx="0.35" cy="0.3" r="0.8">
-          <stop offset="0" stopColor="#9fb0ff" />
-          <stop offset="0.35" stopColor="#3e4cb3" />
-          <stop offset="1" stopColor="#121649" />
+        <linearGradient id="rocketFin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#8fd0ff" />
+          <stop offset="0.5" stopColor="#2f80f2" />
+          <stop offset="1" stopColor="#1a4db3" />
+        </linearGradient>
+        <radialGradient id="bombBody" cx="0.34" cy="0.28" r="0.85">
+          <stop offset="0" stopColor="#8e9cf0" />
+          <stop offset="0.35" stopColor="#3a44a0" />
+          <stop offset="1" stopColor="#0f1340" />
         </radialGradient>
         <linearGradient id="planeTop" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#cfe8ff" />
+          <stop offset="1" stopColor="#cfe6ff" />
         </linearGradient>
-        <radialGradient id="globeShade" cx="0.35" cy="0.3" r="0.75">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
-          <stop offset="0.5" stopColor="#fff" stopOpacity="0" />
-          <stop offset="1" stopColor="#1a0b4a" stopOpacity="0.55" />
+        <radialGradient id="ballShade" cx="0.34" cy="0.28" r="0.8">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.6" />
+          <stop offset="0.45" stopColor="#fff" stopOpacity="0" />
+          <stop offset="1" stopColor="#1a0b4a" stopOpacity="0.5" />
         </radialGradient>
-        <clipPath id="globeClip">
-          <circle cx="50" cy="50" r="40" />
+        <clipPath id="ballClip">
+          <circle cx="50" cy="48" r="40" />
         </clipPath>
-        <linearGradient id="crate1" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#f7c98c" />
-          <stop offset="1" stopColor="#d08a45" />
+        <linearGradient id="woodLight" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffd28f" />
+          <stop offset="1" stopColor="#e39a4a" />
         </linearGradient>
-        <linearGradient id="crate3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#c27c3e" />
-          <stop offset="1" stopColor="#7d4520" />
+        <linearGradient id="woodDark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#c98a4d" />
+          <stop offset="1" stopColor="#8d5527" />
+        </linearGradient>
+        <linearGradient id="hammerHead" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffd27a" />
+          <stop offset="0.5" stopColor="#ff9a2e" />
+          <stop offset="1" stopColor="#d9601c" />
+        </linearGradient>
+        <linearGradient id="grassFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7fe066" />
+          <stop offset="1" stopColor="#36a834" />
         </linearGradient>
         <radialGradient id="cloud1" cx="0.4" cy="0.3" r="0.8">
           <stop offset="0" stopColor="#ffffff" />
@@ -129,10 +197,6 @@ export function GemDefs() {
           <stop offset="0.55" stopColor="#ff9fd0" />
           <stop offset="1" stopColor="#e2559d" />
         </radialGradient>
-        <linearGradient id="grassFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#8be26a" />
-          <stop offset="1" stopColor="#3faa3b" />
-        </linearGradient>
         <linearGradient id="chainFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#eef1f8" />
           <stop offset="1" stopColor="#8d96b3" />
@@ -147,131 +211,80 @@ export function GemDefs() {
   );
 }
 
-/** Soft contact shadow under every candy. */
-const Shadow = ({ rx = 31 }: { rx?: number }) => <ellipse cx="51" cy="92" rx={rx} ry="6.5" fill="url(#cShadow)" />;
+/* ------------------------------------------------------------------ */
+/* Base pieces                                                         */
+/* ------------------------------------------------------------------ */
 
-/** Hard white glint plus a softer secondary reflection: the "wet" look of candy. */
-const Glints = ({ x, y, rot = -32, w = 11, h = 6 }: { x: number; y: number; rot?: number; w?: number; h?: number }) => (
-  <>
-    <ellipse cx={x} cy={y} rx={w} ry={h} fill="url(#cSpec)" transform={`rotate(${rot} ${x} ${y})`} />
-    <circle cx={x + w * 0.95} cy={y - h * 0.6} r="2.2" fill="#fff" opacity="0.95" />
-  </>
-);
+/** Soft contact shadow under a piece. */
+const Shadow = ({ rx = 36, cy = 92 }: { rx?: number; cy?: number }) => <ellipse cx="51" cy={cy} rx={rx} ry="7" fill="url(#pShadow)" />;
 
-function Candy({ color }: { color: number }) {
-  const c = GEM_COLORS[color] ?? GEM_COLORS[0];
-  switch (color) {
-    case 0: // translucent jelly heart
-      return (
-        <>
-          <Shadow rx={30} />
-          <path d={HEART} fill={`url(#cBody0)`} />
-          <path d={HEART} fill={`url(#cGlow0)`} />
-          <path d="M22 58 C30 70 40 77 50 83 C60 77 70 70 78 58" fill="none" stroke={c.rim} strokeOpacity="0.55" strokeWidth="2.2" strokeLinecap="round" />
-          <path d={HEART} fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.6" />
-          <path d="M20 34 C21 25 29 20 36 21 C33 25 28 30 25 39 Z" fill="#fff" opacity="0.35" />
-          <Glints x={31} y={31} />
-          <circle cx="68" cy="27" r="3.2" fill="#fff" opacity="0.8" />
-        </>
-      );
-    case 1: // hard swirl candy
-      return (
-        <>
-          <Shadow rx={31} />
-          <circle cx="50" cy="49" r="39" fill={`url(#cBody1)`} />
-          <g clipPath="url(#clipSwirl)">
-            {SWIRL.map((d, i) => (
-              <path key={i} d={d} fill="#f2f8ff" opacity="0.92" />
-            ))}
-            <circle cx="50" cy="49" r="39" fill="url(#cSphere)" />
-            <circle cx="50" cy="49" r="39" fill={`url(#cGlow1)`} opacity="0.55" />
-          </g>
-          <circle cx="50" cy="49" r="38.2" fill="none" stroke={c.rim} strokeOpacity="0.5" strokeWidth="1.6" />
-          <circle cx="50" cy="49" r="39" fill="none" stroke={c.depth} strokeOpacity="0.4" strokeWidth="1.4" />
-          <Glints x={34} y={28} w={13} h={6.5} />
-        </>
-      );
-    case 2: // jelly star
-      return (
-        <>
-          <Shadow rx={30} />
-          <polygon points={STAR} fill={`url(#cBody2)`} stroke={`url(#cBody2)`} strokeWidth="9" strokeLinejoin="round" />
-          <polygon points={STAR} fill={`url(#cGlow2)`} stroke={`url(#cGlow2)`} strokeWidth="9" strokeLinejoin="round" />
-          <polygon points={STAR} fill="none" stroke={c.rim} strokeOpacity="0.45" strokeWidth="1.6" strokeLinejoin="round" transform="translate(50 52) scale(0.82) translate(-50 -52)" />
-          <path d="M44 22 L48 15 L50 24 Z M27 41 L35 39 L33 45 Z" fill="#fff" opacity="0.55" />
-          <Glints x={42} y={33} w={9} h={5} />
-        </>
-      );
-    case 3: // sugared jelly cube
-      return (
-        <>
-          <Shadow rx={33} />
-          <rect x="14" y="14" width="72" height="72" rx="18" fill={`url(#cBody3)`} />
-          <g clipPath="url(#clipCube)">
-            <rect x="14" y="14" width="72" height="72" fill={`url(#cGlow3)`} />
-            <path d="M14 14 H86 V30 Q50 24 14 30 Z" fill="#fff" opacity="0.18" />
-            <rect x="14" y="14" width="72" height="72" fill="url(#cSugar)" opacity="0.85" />
-          </g>
-          <rect x="14.8" y="14.8" width="70.4" height="70.4" rx="17.4" fill="none" stroke={c.rim} strokeOpacity="0.55" strokeWidth="1.6" />
-          <rect x="14" y="14" width="72" height="72" rx="18" fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.4" />
-          <Glints x={32} y={27} w={12} h={5.5} rot={-18} />
-        </>
-      );
-    case 4: // speckled jelly bean
-      return (
-        <>
-          <Shadow rx={33} />
-          <g transform="rotate(-24 50 50)">
-            <rect x="8" y="24" width="84" height="52" rx="26" fill={`url(#cBody4)`} />
-            <rect x="8" y="24" width="84" height="52" rx="26" fill={`url(#cGlow4)`} />
-            <rect x="8" y="24" width="84" height="52" rx="26" fill="url(#cSpeckle)" />
-            <rect x="8.8" y="24.8" width="82.4" height="50.4" rx="25.2" fill="none" stroke={c.rim} strokeOpacity="0.5" strokeWidth="1.5" />
-            <rect x="8" y="24" width="84" height="52" rx="26" fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.4" />
-            <rect x="20" y="30" width="48" height="10" rx="5" fill="url(#cSpec)" opacity="0.9" />
-            <circle cx="75" cy="34" r="2.6" fill="#fff" opacity="0.9" />
-          </g>
-        </>
-      );
-    default: // sugar-coated gumdrop
-      return (
-        <>
-          <Shadow rx={34} />
-          <path d={DROP} fill={`url(#cBody5)`} />
-          <g clipPath="url(#clipDrop)">
-            <path d={DROP} fill={`url(#cGlow5)`} />
-            <rect x="10" y="10" width="80" height="80" fill="url(#cSugar)" opacity="0.9" />
-            <path d="M13 79 Q50 70 87 79 V90 H13 Z" fill={c.depth} opacity="0.25" />
-          </g>
-          <path d={DROP} fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.4" />
-          <Glints x={35} y={32} w={10} h={6} rot={-40} />
-        </>
-      );
-  }
+/** A chunky, glossy toy piece: extruded base, bright sheen and an embossed symbol. */
+function Piece({ color }: { color: number }) {
+  const i = Math.min(Math.max(color, 0), GEM_COLORS.length - 1);
+  const g = GEM_COLORS[i];
+  const d = SHAPES[i];
+  const emblem = EMBLEMS[i];
+  const [sx, sy, srx, sry] = SHEEN[i];
+  return (
+    <>
+      <Shadow />
+      {/* extrusion: the thick darker bottom edge */}
+      <path d={d} fill={g.depth} transform="translate(0 6)" />
+      <path d={d} fill={g.dark} transform="translate(0 3.5)" />
+      {/* body */}
+      <path d={d} fill={`url(#pBody${i})`} />
+      <g clipPath={`url(#pClip${i})`}>
+        <ellipse cx={sx} cy={sy} rx={srx} ry={sry} fill="url(#pSheen)" />
+        <path d={d} fill="url(#pRim)" />
+      </g>
+      <path d={d} fill="none" stroke={g.depth} strokeWidth="2.2" strokeOpacity="0.5" />
+      {/* embossed symbol: light edge below, dark edge above, recessed floor */}
+      <g transform="translate(0 2.2)">{emblem(g.light, 0.75)}</g>
+      <g transform="translate(0 -1.6)">{emblem(g.depth, 0.75)}</g>
+      {emblem(g.dark, 0.72)}
+      {/* crisp glint */}
+      <ellipse cx={sx - 8} cy={sy - 8} rx="9" ry="4.5" fill="#fff" opacity="0.85" transform={`rotate(-35 ${sx - 8} ${sy - 8})`} />
+    </>
+  );
 }
 
-/** A realistic 3D candy, one shape per color. */
 export const Gem = memo(function Gem({ color, className }: { color: number; className?: string }) {
   return (
     <svg viewBox="0 0 100 100" className={className} aria-hidden>
-      <Candy color={color} />
+      <Piece color={color} />
     </svg>
   );
 });
 
+/* ------------------------------------------------------------------ */
+/* Specials                                                            */
+/* ------------------------------------------------------------------ */
+
 function Rocket({ vertical }: { vertical: boolean }) {
   return (
     <svg viewBox="0 0 100 100" aria-hidden>
-      <g transform={vertical ? "rotate(90 50 50)" : undefined}>
+      <Shadow rx={vertical ? 26 : 38} />
+      <g transform={vertical ? "rotate(-90 50 50)" : undefined}>
         <g className="rocket-shimmer">
-          <path d="M18 36 L4 51 L18 66 Z" fill="url(#rocketNose)" stroke="#a35f00" strokeWidth="3" strokeLinejoin="round" />
-          <path d="M82 36 L96 51 L82 66 Z" fill="url(#rocketNose)" stroke="#a35f00" strokeWidth="3" strokeLinejoin="round" />
-          <rect x="15" y="38" width="70" height="32" rx="16" fill="#7d0a12" opacity="0.6" />
-          <rect x="15" y="33" width="70" height="34" rx="17" fill="url(#rocketBody)" stroke="#7d0a12" strokeWidth="3.5" />
-          <rect x="33" y="34" width="8" height="32" fill="#fff" opacity="0.92" />
-          <rect x="59" y="34" width="8" height="32" fill="#fff" opacity="0.92" />
-          <rect x="22" y="38" width="56" height="8" rx="4" fill="#fff" opacity="0.5" />
-          <circle cx="50" cy="50" r="7.5" fill="#ffe066" stroke="#a35f00" strokeWidth="2.5" />
-          <circle cx="48" cy="48" r="2.5" fill="#fff" />
+          {/* flame */}
+          <path d="M22 50 C14 40 4 44 2 50 C4 56 14 60 22 50 Z" fill="#ff9d1f" />
+          <path d="M20 50 C15 45 10 47 8 50 C10 53 15 55 20 50 Z" fill="#fff0a0" />
+          {/* fins */}
+          <path d="M30 34 L14 22 L19 50 L14 78 L30 66 Z" fill="#0b2866" transform="translate(0 5)" />
+          <path d="M30 34 L14 22 L19 50 L14 78 L30 66 Z" fill="url(#rocketFin)" stroke="#0b2866" strokeWidth="2.5" strokeLinejoin="round" />
+          {/* body */}
+          <rect x="22" y="37" width="58" height="34" rx="14" fill="#5c0b0b" />
+          <rect x="22" y="32" width="58" height="34" rx="14" fill="url(#rocketBody)" />
+          <rect x="22" y="32" width="58" height="34" rx="14" fill="none" stroke="#5c0b0b" strokeWidth="2.2" strokeOpacity="0.6" />
+          {/* white band + window */}
+          <path d="M44 32 H56 V66 H44 Z" fill="#fff" opacity="0.92" />
+          <circle cx="36" cy="49" r="7" fill="#0b2866" />
+          <circle cx="36" cy="48" r="5.5" fill="#93d2ff" />
+          <circle cx="34.5" cy="46.5" r="2" fill="#fff" />
+          {/* nose */}
+          <path d="M78 37 Q98 46 98 54 Q98 62 78 71 Z" fill="#874b00" />
+          <path d="M78 32 Q98 41 98 49 Q98 57 78 66 Z" fill="url(#rocketNose)" stroke="#874b00" strokeWidth="2.2" strokeOpacity="0.6" strokeLinejoin="round" />
+          <ellipse cx="48" cy="37" rx="22" ry="3" fill="#fff" opacity="0.45" />
         </g>
       </g>
     </svg>
@@ -281,16 +294,19 @@ function Rocket({ vertical }: { vertical: boolean }) {
 function Bomb() {
   return (
     <svg viewBox="0 0 100 100" aria-hidden className="bomb-wobble">
-      <circle cx="50" cy="61" r="32" fill="#070a2e" opacity="0.5" />
-      <circle cx="50" cy="56" r="32" fill="url(#bombBody)" stroke="#0b0f33" strokeWidth="3.5" />
-      <rect x="40" y="18" width="20" height="11" rx="4" fill="#a6b0d4" stroke="#3b4470" strokeWidth="3" />
-      <path d="M50 18 C52 9 61 7 68 11" stroke="#7a5230" strokeWidth="4" fill="none" strokeLinecap="round" />
-      <g className="fuse-spark" style={{ transformOrigin: "70px 10px" }}>
-        <path d="M70 1 L73 7 L79 7 L74 11 L76 18 L70 14 L64 18 L66 11 L61 7 L67 7 Z" fill="#ffd43b" />
-        <circle cx="70" cy="10" r="3" fill="#fff" />
+      <Shadow rx={34} cy={94} />
+      <circle cx="50" cy="62" r="34" fill="#070a2e" />
+      <circle cx="50" cy="57" r="34" fill="url(#bombBody)" />
+      <circle cx="50" cy="57" r="34" fill="none" stroke="#070a2e" strokeWidth="2.5" strokeOpacity="0.7" />
+      <path d="M16 57 A34 34 0 0 0 84 57" fill="none" stroke="#fff" strokeWidth="2" strokeOpacity="0.18" />
+      <ellipse cx="36" cy="40" rx="12" ry="7" fill="#fff" opacity="0.75" transform="rotate(-35 36 40)" />
+      <rect x="39" y="18" width="22" height="12" rx="4" fill="#7c86b0" stroke="#2a2f5c" strokeWidth="2.5" />
+      <rect x="42" y="20" width="16" height="3" rx="1.5" fill="#fff" opacity="0.5" />
+      <path d="M50 18 C52 8 62 6 70 10" stroke="#a87040" strokeWidth="4.5" fill="none" strokeLinecap="round" />
+      <g className="fuse-spark" style={{ transformOrigin: "72px 9px" }}>
+        <path d="M72 0 L75 6 L82 6 L76.5 10.5 L78.5 18 L72 13.5 L65.5 18 L67.5 10.5 L62 6 L69 6 Z" fill="#ffd43b" />
+        <circle cx="72" cy="9" r="3" fill="#fff" />
       </g>
-      <ellipse cx="37" cy="43" rx="10" ry="6.5" fill="#fff" opacity="0.6" transform="rotate(-35 37 43)" />
-      <circle cx="62" cy="70" r="3" fill="#fff" opacity="0.35" />
     </svg>
   );
 }
@@ -299,7 +315,7 @@ function Plane() {
   return (
     <svg viewBox="0 0 100 100" aria-hidden className="plane-flutter">
       <g transform="rotate(-12 50 50)">
-        <path d="M8 52 L92 18 L64 86 L48 62 Z" transform="translate(0 6)" fill="#0f3f80" opacity="0.35" />
+        <path d="M8 52 L92 18 L64 86 L48 62 Z" transform="translate(0 7)" fill="#0f3f80" opacity="0.4" />
         <path d="M8 52 L92 18 L48 62 Z" fill="url(#planeTop)" stroke="#1d5fae" strokeWidth="3.5" strokeLinejoin="round" />
         <path d="M48 62 L92 18 L64 86 Z" fill="#8fc8ff" stroke="#1d5fae" strokeWidth="3.5" strokeLinejoin="round" />
         <path d="M48 62 L52 80 L64 86" fill="#5aa6ee" stroke="#1d5fae" strokeWidth="3" strokeLinejoin="round" />
@@ -309,42 +325,30 @@ function Plane() {
   );
 }
 
-const GLOBE_TILES = ["#ff4b5c", "#ffcf26", "#33a3ff", "#4ed351", "#b863ff", "#ff9f43"];
+const BALL_COLORS = ["#f03a3a", "#ffc62a", "#2f80f2", "#41bd3e", "#a354ea", "#ff8a1f"];
 
-/** A spinning multicolor glass ball made of little tiles. */
-function Globe() {
-  const rows = 6;
-  const cols = 12;
-  const tiles: ReactNode[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      tiles.push(
-        <rect
-          key={`${r}-${c}`}
-          x={c * 13.4 + 1}
-          y={12 + r * 13.4 + 1}
-          width="11.4"
-          height="11.4"
-          rx="2.5"
-          fill={GLOBE_TILES[(r * 2 + c) % GLOBE_TILES.length]}
-        />,
-      );
-    }
-  }
+/** A spinning beach ball: clears every piece of one colour. */
+function Ball() {
+  const wedge = (i: number) => {
+    const a0 = (i * Math.PI) / 3 - Math.PI / 2;
+    const a1 = a0 + Math.PI / 3;
+    const p = (a: number) => `${f(50 + Math.cos(a) * 44)} ${f(48 + Math.sin(a) * 44)}`;
+    return `M50 48 L${p(a0)} A44 44 0 0 1 ${p(a1)} Z`;
+  };
   return (
     <svg viewBox="0 0 100 100" aria-hidden>
-      <circle cx="50" cy="55" r="40" fill="#1a0b4a" opacity="0.45" />
-      <circle cx="50" cy="50" r="41.5" fill="#2a1466" />
-      <g clipPath="url(#globeClip)">
-        <g className="globe-spin">
-          {tiles}
-          <g transform="translate(160.8 0)">{tiles}</g>
+      <Shadow rx={34} />
+      <circle cx="50" cy="53" r="40" fill="#1a0b4a" opacity="0.8" />
+      <g clipPath="url(#ballClip)">
+        <g className="ball-spin">
+          {BALL_COLORS.map((c, i) => (
+            <path key={i} d={wedge(i)} fill={c} />
+          ))}
         </g>
-        <circle cx="50" cy="50" r="40" fill="url(#globeShade)" />
+        <circle cx="50" cy="48" r="40" fill="url(#ballShade)" />
       </g>
-      <circle cx="50" cy="50" r="40" fill="none" stroke="#fff" strokeOpacity="0.85" strokeWidth="3" />
-      <ellipse cx="36" cy="30" rx="12" ry="7" fill="#fff" opacity="0.85" transform="rotate(-30 36 30)" />
-      <circle cx="66" cy="68" r="3" fill="#fff" opacity="0.8" />
+      <circle cx="50" cy="48" r="40" fill="none" stroke="#1a0b4a" strokeWidth="2.5" strokeOpacity="0.55" />
+      <ellipse cx="35" cy="30" rx="12" ry="7" fill="#fff" opacity="0.85" transform="rotate(-35 35 30)" />
     </svg>
   );
 }
@@ -360,7 +364,7 @@ export function SpecialArt({ kind }: { kind: SpecialKind }) {
     case "plane":
       return <Plane />;
     case "rainbow":
-      return <Globe />;
+      return <Ball />;
   }
 }
 
@@ -378,33 +382,51 @@ export const PieceArt = memo(function PieceArt({ tile }: { tile: Pick<Tile, "col
   return <Gem color={tile.color} className="h-full w-full" />;
 });
 
+/* ------------------------------------------------------------------ */
+/* Obstacles                                                           */
+/* ------------------------------------------------------------------ */
+
+const STAMP = "M50 24 L57 41 L75 43 L62 55 L66 73 L50 64 L34 73 L38 55 L25 43 L43 41 Z";
+
+/** Wooden planks nailed over a cell. */
 export function CrateArt({ hp }: { hp: number }) {
   const heavy = hp >= 3;
+  const wood = heavy ? "url(#woodDark)" : "url(#woodLight)";
+  const edge = heavy ? "#5a2f12" : "#8d5527";
+  const seam = heavy ? "#4a2510" : "#a4632d";
   return (
     <svg viewBox="0 0 100 100" aria-hidden className="h-full w-full">
-      <rect x="5" y="10" width="90" height="88" rx="15" fill="#5c3317" opacity="0.55" />
-      <rect x="5" y="4" width="90" height="88" rx="15" fill={heavy ? "url(#crate3)" : "url(#crate1)"} stroke="#5c3317" strokeWidth="4" />
-      <rect x="15" y="14" width="70" height="68" rx="7" fill="none" stroke="#5c3317" strokeOpacity="0.5" strokeWidth="3.5" />
-      <path d="M18 78 L82 18" stroke="#5c3317" strokeOpacity="0.55" strokeWidth="8" strokeLinecap="round" />
-      <path d="M18 78 L82 18" stroke={heavy ? "#cf8a4c" : "#ffe0b3"} strokeWidth="3.5" strokeLinecap="round" />
-      <path d="M12 36 H88 M12 58 H88" stroke="#5c3317" strokeOpacity="0.22" strokeWidth="2.5" />
+      <rect x="4" y="9" width="92" height="88" rx="12" fill={edge} />
+      <rect x="4" y="3" width="92" height="88" rx="12" fill={wood} />
+      {/* two planks with a seam */}
+      <path d="M50 3 V91" stroke={seam} strokeWidth="3" />
+      <path d="M50 3 V91" stroke="#fff" strokeWidth="1.5" strokeOpacity="0.25" transform="translate(2 0)" />
+      <g stroke={seam} strokeOpacity="0.45" strokeWidth="1.6" strokeLinecap="round" fill="none">
+        <path d="M14 18 Q26 22 36 18 M12 42 Q22 46 38 44 M14 70 Q24 66 36 70" />
+        <path d="M62 14 Q74 18 86 14 M60 38 Q72 42 88 40 M62 66 Q74 62 86 66" />
+      </g>
+      <rect x="4" y="3" width="92" height="88" rx="12" fill="none" stroke={edge} strokeWidth="3" />
+      <rect x="9" y="7" width="82" height="20" rx="8" fill="#fff" opacity="0.22" />
+      {/* embossed stamp */}
+      <path d={STAMP} fill="#fff" opacity="0.35" transform="translate(0 2)" />
+      <path d={STAMP} fill={edge} opacity="0.7" transform="translate(0 -1.5)" />
+      <path d={STAMP} fill={edge} opacity="0.45" />
       {hp >= 2 && (
-        <g fill="#c3cbe0" stroke="#4a5272" strokeWidth="2.5">
-          <path d="M5 22 Q5 4 23 4 L23 15 Q16 15 16 22 Z" />
-          <path d="M95 22 Q95 4 77 4 L77 15 Q84 15 84 22 Z" />
-          <path d="M5 74 Q5 92 23 92 L23 81 Q16 81 16 74 Z" />
-          <path d="M95 74 Q95 92 77 92 L77 81 Q84 81 84 74 Z" />
+        <g fill="#c3cbe0" stroke="#4a5272" strokeWidth="2.5" strokeLinejoin="round">
+          <path d="M4 21 Q4 3 22 3 L22 14 Q15 14 15 21 Z" />
+          <path d="M96 21 Q96 3 78 3 L78 14 Q85 14 85 21 Z" />
+          <path d="M4 73 Q4 91 22 91 L22 80 Q15 80 15 73 Z" />
+          <path d="M96 73 Q96 91 78 91 L78 80 Q85 80 85 73 Z" />
         </g>
       )}
       {heavy && (
         <g fill="#e6ebf7" stroke="#4a5272" strokeWidth="1.8">
-          <circle cx="29" cy="28" r="4" />
-          <circle cx="71" cy="28" r="4" />
-          <circle cx="29" cy="68" r="4" />
-          <circle cx="71" cy="68" r="4" />
+          <circle cx="28" cy="30" r="3.5" />
+          <circle cx="72" cy="30" r="3.5" />
+          <circle cx="28" cy="66" r="3.5" />
+          <circle cx="72" cy="66" r="3.5" />
         </g>
       )}
-      <ellipse cx="32" cy="14" rx="16" ry="4.5" fill="#fff" opacity="0.4" />
     </svg>
   );
 }
@@ -414,7 +436,7 @@ export function CloudArt({ hp }: { hp: number }) {
   const stroke = hp >= 2 ? "#c43c84" : "#e489b8";
   return (
     <svg viewBox="0 0 100 100" aria-hidden className="h-full w-full">
-      <g transform="translate(0 5)" fill="#a33a73" opacity="0.3">
+      <g transform="translate(0 6)" fill="#a33a73" opacity="0.35">
         <circle cx="30" cy="58" r="24" />
         <circle cx="70" cy="58" r="24" />
         <circle cx="50" cy="38" r="26" />
@@ -441,6 +463,7 @@ export function BlockerArt({ kind, hp }: { kind: BlockerKind; hp: number }) {
   return kind === "crate" ? <CrateArt hp={hp} /> : <CloudArt hp={hp} />;
 }
 
+/** Frosted glass over a piece; cracks appear after the first hit. */
 export function IceArt({ hp }: { hp: number }) {
   return (
     <div
@@ -454,7 +477,14 @@ export function IceArt({ hp }: { hp: number }) {
       }}
     >
       <div className="absolute left-[12%] top-[9%] h-[16%] w-[44%] -rotate-12 rounded-full bg-white/85" />
-      {hp >= 2 && <div className="absolute bottom-[12%] right-[10%] h-[10%] w-[28%] -rotate-12 rounded-full bg-white/70" />}
+      {hp >= 2 ? (
+        <div className="absolute bottom-[12%] right-[10%] h-[10%] w-[28%] -rotate-12 rounded-full bg-white/70" />
+      ) : (
+        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden>
+          <path d="M22 18 L46 44 L40 62 L58 84 M46 44 L70 30 M40 62 L18 72" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+          <path d="M22 18 L46 44 L40 62 L58 84 M46 44 L70 30 M40 62 L18 72" fill="none" stroke="#3b8fe0" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.7" transform="translate(1 1)" />
+        </svg>
+      )}
     </div>
   );
 }
@@ -487,21 +517,77 @@ export function LockArt() {
   );
 }
 
-/** Grass carpet that sits under a piece. */
+const CLOVER = "M0 -3 C-7 -14 -17 -6 -8 1 C-17 8 -7 16 0 5 C7 16 17 8 8 1 C17 -6 7 -14 0 -3 Z";
+
+/** Clover carpet that sits under a piece. */
 export function GrassArt() {
+  const spots: [number, number, number][] = [
+    [26, 27, 1.5],
+    [68, 24, 1.3],
+    [76, 66, 1.45],
+    [36, 68, 1.6],
+    [54, 46, 1.1],
+  ];
   return (
     <svg viewBox="0 0 100 100" aria-hidden className="h-full w-full" preserveAspectRatio="none">
       <rect x="0" y="0" width="100" height="100" rx="20" fill="url(#grassFill)" />
-      <g stroke="#b9f59a" strokeWidth="4" strokeLinecap="round" opacity="0.8">
-        <path d="M18 30 l4 -10 M26 30 l-3 -9" />
-        <path d="M66 22 l4 -10 M74 22 l-3 -9" />
-        <path d="M40 74 l4 -10 M48 74 l-3 -9" />
-        <path d="M80 82 l4 -10" />
-        <path d="M14 84 l4 -10" />
+      <rect x="4" y="4" width="92" height="30" rx="14" fill="#fff" opacity="0.18" />
+      {spots.map(([x, y, s], i) => (
+        <g key={i} transform={`translate(${x} ${y}) scale(${s})`}>
+          <path d={CLOVER} fill="#176b1c" opacity="0.7" transform="translate(0 2)" />
+          <path d={CLOVER} fill="#2f9d2e" />
+          <path d={CLOVER} fill="#6fd65c" opacity="0.9" transform="translate(0 -1) scale(0.72)" />
+        </g>
+      ))}
+      <rect x="0" y="0" width="100" height="100" rx="20" fill="none" stroke="#1f7f24" strokeWidth="3" strokeOpacity="0.5" />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Tools                                                               */
+/* ------------------------------------------------------------------ */
+
+/** Chunky mallet for the hammer booster. */
+export function HammerArt() {
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden className="h-full w-full">
+      <ellipse cx="52" cy="88" rx="26" ry="6" fill="#000" opacity="0.25" />
+      <g transform="rotate(-42 50 50)">
+        <rect x="45" y="36" width="12" height="54" rx="6" fill="#5a2f12" transform="translate(0 3)" />
+        <rect x="45" y="36" width="12" height="54" rx="6" fill="url(#woodDark)" />
+        <rect x="47" y="40" width="3" height="40" rx="1.5" fill="#fff" opacity="0.35" />
+        <rect x="22" y="12" width="58" height="28" rx="9" fill="#7a3a00" transform="translate(0 4)" />
+        <rect x="22" y="12" width="58" height="28" rx="9" fill="url(#hammerHead)" />
+        <rect x="22" y="12" width="58" height="28" rx="9" fill="none" stroke="#7a3a00" strokeWidth="2.2" strokeOpacity="0.6" />
+        <rect x="27" y="15" width="48" height="8" rx="4" fill="#fff" opacity="0.45" />
+        <rect x="44" y="12" width="14" height="28" fill="#fff" opacity="0.18" />
       </g>
     </svg>
   );
 }
+
+/** Two crossing arrows for the shuffle booster. */
+export function ShuffleArt() {
+  const arrows = "M14 32 H30 L62 68 H78 M14 68 H30 L62 32 H78";
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden className="h-full w-full">
+      <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d={arrows} stroke="#0b3a7a" strokeWidth="15" transform="translate(0 3)" opacity="0.5" />
+        <path d={arrows} stroke="#0b3a7a" strokeWidth="15" />
+        <path d={arrows} stroke="#fff" strokeWidth="8" />
+      </g>
+      <g strokeLinejoin="round">
+        <path d="M74 20 L94 32 L74 44 Z" fill="#fff" stroke="#0b3a7a" strokeWidth="4" />
+        <path d="M74 56 L94 68 L74 80 Z" fill="#fff" stroke="#0b3a7a" strokeWidth="4" />
+      </g>
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* HUD                                                                 */
+/* ------------------------------------------------------------------ */
 
 export function GoalIcon({
   kind,

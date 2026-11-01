@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "Djesi Jewels",
     short_name: "Djesi Jewels",
-    description: "Joc de potrivit bomboane cu nivele infinite.",
+    description: "Joc de potrivit piese cu nivele infinite.",
     start_url: "/",
     scope: "/",
     display: "fullscreen",
