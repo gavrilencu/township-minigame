@@ -17,7 +17,7 @@ import { Avatar, BoosterIcon, formatNumber, Modal, timeAgo } from "./ui";
 
 const INTRO: Record<string, { title: string; text: string }> = {
   crate: { title: "Nou: Cutii de lemn", text: "Se sparg când faci potriviri lângă ele sau când le lovește o explozie. Cele întărite au mai multe straturi." },
-  ice: { title: "Nou: Gheață", text: "Se topește când potrivești bijuteria de deasupra ei. Gheața groasă are nevoie de două lovituri." },
+  ice: { title: "Nou: Gheață", text: "Se topește când potrivești bomboana de deasupra ei. Gheața groasă are nevoie de două lovituri." },
   cloud: { title: "Nou: Nori de vată", text: "Dispar din potriviri alăturate sau din explozii. Rachetele și bombele îi risipesc rapid!" },
   lock: { title: "Nou: Lanțuri", text: "Piesa legată nu se mișcă și ține pe loc tot ce e deasupra. O potrivire sau o explozie rupe lanțul." },
   grass: { title: "Nou: Iarbă", text: "Potrivirile care ating iarba o întind pe toate piesele potrivite. Acoperă toată tabla!" },

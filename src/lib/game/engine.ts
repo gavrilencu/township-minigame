@@ -11,6 +11,7 @@ import type {
   SoundName,
   SpecialKind,
   Tile,
+  TileExit,
 } from "./types";
 
 type Activation = {
@@ -41,6 +42,10 @@ const DIRS: [number, number][] = [
 
 const BANNERS: Record<number, string> = { 2: "Bine!", 3: "Super!", 4: "Minunat!", 6: "Fantastic!" };
 
+/** Seconds per cell for the ripple of each kind of destruction (shared with the renderer's effects). */
+export const PACE = { match: 0.03, rocket: 0.032, bomb: 0.065, rainbow: 0.03, plane: 0.04 };
+const cheb = (a: Pos, r: number, c: number) => Math.max(Math.abs(a.r - r), Math.abs(a.c - c));
+
 /** Fall animation length (seconds) for a tile dropping `rows` cells. Shared with the renderer. */
 export function fallSeconds(rows: number): number {
   return 0.07 + 0.1 * Math.sqrt(Math.max(rows, 0));
@@ -53,6 +58,7 @@ class Step {
   hit = new Set<number>();
   adjDamaged = new Set<number>();
   reserved = new Set<number>();
+  removed = new Map<number, TileExit>();
   grassy = false;
   constructor(public cascade: number) {}
   nextWave() {
@@ -60,6 +66,7 @@ class Step {
     this.sounds = new Set();
     this.hit = new Set();
     this.adjDamaged = new Set();
+    this.removed = new Map();
   }
 }
 
@@ -135,7 +142,7 @@ export class Engine {
     const B = this.cells[b.r][b.c].tile!;
     const frames: Frame[] = [];
     this.swap(a, b);
-    frames.push(this.frame("swap", 170, undefined, ["swap"]));
+    frames.push({ ...this.frame("swap", 200, undefined, ["swap"]), swapped: A.id });
 
     if (A.special || B.special) {
       this.movesLeft--;
@@ -144,7 +151,7 @@ export class Engine {
     }
     if (!this.hasMatchAt(a) && !this.hasMatchAt(b)) {
       this.swap(a, b);
-      frames.push(this.frame("swapBack", 200, undefined, ["invalid"]));
+      frames.push({ ...this.frame("swapBack", 260, undefined, ["invalid"]), swapped: A.id });
       return { frames, valid: false };
     }
     this.movesLeft--;
@@ -297,10 +304,17 @@ export class Engine {
     return frames;
   }
 
+  /** Long enough for the slowest piece of the ripple to finish breaking. */
   private waveDuration(step: Step): number {
-    if (step.effects.some((e) => e.type === "plane")) return 430;
-    if (step.effects.some((e) => e.type === "beam" || e.type === "blast" || e.type === "rainbow")) return 300;
-    return 240;
+    let lag = 0;
+    for (const x of step.removed.values()) lag = Math.max(lag, x.delay);
+    for (const e of step.effects) if ((e.type === "pop" || e.type === "shard") && e.delay > lag) lag = e.delay;
+    const base = step.effects.some((e) => e.type === "plane")
+      ? 430
+      : step.effects.some((e) => e.type === "beam" || e.type === "blast" || e.type === "rainbow")
+        ? 300
+        : 260;
+    return base + Math.round(lag * 1000);
   }
 
   private processMatches(groups: Group[], step: Step, swapCells: Pos[] | undefined, cascade: number) {
@@ -309,7 +323,8 @@ export class Engine {
       const kind = classify(g);
       const spot = this.pickSpot(g, swapCells);
       const grassy = g.cells.some((p) => this.cells[p.r][p.c].grass);
-      for (const p of g.cells) this.hit(p.r, p.c, "match", step);
+      // Pieces making a special slide into it; plain matches burst outwards from the swap.
+      for (const p of g.cells) this.hit(p.r, p.c, "match", step, kind ? 0 : cheb(spot, p.r, p.c) * PACE.match, kind ? spot : undefined);
       if (grassy) for (const p of g.cells) this.growGrass(p.r, p.c, step);
       for (const p of g.cells) {
         for (const [dr, dc] of DIRS) {
@@ -383,7 +398,7 @@ export class Engine {
     if (k1 === "rainbow" && k2 === "rainbow") {
       step.effects.push({ id: this.fx(), type: "blast", r: p.r, c: p.c, radius: 12 });
       step.sounds.add("rainbow").add("bomb");
-      for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) this.hit(r, c, "blast", step);
+      for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) this.hit(r, c, "blast", step, cheb(p, r, c) * PACE.plane);
       this.score += 2000;
     } else if (has("rainbow")) {
       this.convert(p.r, p.c, k1 === "rainbow" ? k2 : k1, step);
@@ -460,10 +475,10 @@ export class Engine {
   }
 
   private beam(r: number, c: number, dir: "h" | "v", step: Step) {
-    step.effects.push({ id: this.fx(), type: "beam", r, c, dir });
+    step.effects.push({ id: this.fx(), type: "beam", r, c, dir, pace: PACE.rocket });
     step.sounds.add("rocket");
-    if (dir === "h") for (let cc = 0; cc < this.cols; cc++) this.hit(r, cc, "blast", step);
-    else for (let rr = 0; rr < this.rows; rr++) this.hit(rr, c, "blast", step);
+    if (dir === "h") for (let cc = 0; cc < this.cols; cc++) this.hit(r, cc, "blast", step, Math.abs(cc - c) * PACE.rocket);
+    else for (let rr = 0; rr < this.rows; rr++) this.hit(rr, c, "blast", step, Math.abs(rr - r) * PACE.rocket);
   }
 
   private blast(r: number, c: number, radius: number, step: Step) {
@@ -472,7 +487,7 @@ export class Engine {
     for (let dr = -radius; dr <= radius; dr++) {
       for (let dc = -radius; dc <= radius; dc++) {
         if (Math.abs(dr) === radius && Math.abs(dc) === radius) continue;
-        this.hit(r + dr, c + dc, "blast", step);
+        this.hit(r + dr, c + dc, "blast", step, Math.max(Math.abs(dr), Math.abs(dc)) * PACE.bomb);
       }
     }
   }
@@ -480,7 +495,7 @@ export class Engine {
   private planeLaunch(r: number, c: number, carry: SpecialKind | null, step: Step, cross: boolean) {
     if (cross) {
       this.hit(r, c, "blast", step);
-      for (const [dr, dc] of DIRS) this.hit(r + dr, c + dc, "blast", step);
+      for (const [dr, dc] of DIRS) this.hit(r + dr, c + dc, "blast", step, PACE.plane);
     }
     const t = this.pickTarget(step);
     if (!t) return;
@@ -518,16 +533,16 @@ export class Engine {
   private rainbow(r: number, c: number, color: number | undefined, step: Step) {
     const col = color ?? this.mostCommonColor();
     const targets = this.positions((t) => !t.special && t.color === col, true);
-    step.effects.push({ id: this.fx(), type: "rainbow", r, c, targets });
+    step.effects.push({ id: this.fx(), type: "rainbow", r, c, targets, pace: PACE.rainbow });
     step.sounds.add("rainbow");
     this.hit(r, c, "blast", step);
-    for (const p of targets) this.hit(p.r, p.c, "blast", step);
+    targets.forEach((p, i) => this.hit(p.r, p.c, "blast", step, Math.min(i * PACE.rainbow, 0.5)));
   }
 
   private convert(r: number, c: number, kind: SpecialKind, step: Step) {
     const col = this.mostCommonColor();
     const targets = this.positions((t) => !t.special && t.color === col);
-    step.effects.push({ id: this.fx(), type: "rainbow", r, c, targets });
+    step.effects.push({ id: this.fx(), type: "rainbow", r, c, targets, pace: PACE.rainbow });
     step.sounds.add("rainbow");
     for (const p of targets) {
       const t = this.cells[p.r][p.c].tile!;
@@ -551,12 +566,13 @@ export class Engine {
   /* Damage                                                              */
   /* ------------------------------------------------------------------ */
 
-  private hit(r: number, c: number, source: "match" | "blast", step: Step) {
+  /** `delay` (s) staggers the visual break; `merge` makes the piece slide into a new special first. */
+  private hit(r: number, c: number, source: "match" | "blast", step: Step, delay = 0, merge?: Pos) {
     if (r < 0 || c < 0 || r >= this.rows || c >= this.cols) return;
     const cell = this.cells[r][c];
     if (!cell.exists) return;
     if (cell.blocker) {
-      if (source === "blast") this.damageBlocker(r, c, step);
+      if (source === "blast") this.damageBlocker(r, c, step, delay);
       return;
     }
     const key = r * this.cols + c;
@@ -566,7 +582,7 @@ export class Engine {
     if (cell.lock > 0 && cell.tile) {
       if (already) return;
       cell.lock--;
-      step.effects.push({ id: this.fx(), type: "shard", r, c, kind: "lock" });
+      step.effects.push({ id: this.fx(), type: "shard", r, c, kind: "lock", delay });
       step.sounds.add("lock");
       this.score += 40;
       if (cell.lock === 0) this.collect("lock", step, r, c);
@@ -575,16 +591,17 @@ export class Engine {
     const t = cell.tile;
     if (t) {
       cell.tile = null;
+      step.removed.set(t.id, { delay, merge, blast: source === "blast" || undefined });
       if (t.special) {
         if (!t.armed) step.pending.push({ r, c, kind: t.special, grassy: cell.grass || undefined });
       } else {
-        step.effects.push({ id: this.fx(), type: "pop", r, c, color: t.color });
+        if (!merge) step.effects.push({ id: this.fx(), type: "pop", r, c, color: t.color, delay });
         this.collect("color", step, r, c, { color: t.color });
         if (source === "blast") this.score += 20;
       }
-      this.damageIce(r, c, step);
+      this.damageIce(r, c, step, delay);
     } else if (!already && source === "blast") {
-      this.damageIce(r, c, step);
+      this.damageIce(r, c, step, delay);
     }
   }
 
@@ -597,12 +614,12 @@ export class Engine {
     this.collect("grass", step, r, c);
   }
 
-  private damageBlocker(r: number, c: number, step: Step) {
+  private damageBlocker(r: number, c: number, step: Step, delay = 0) {
     const cell = this.cells[r][c];
     const b = cell.blocker;
     if (!b) return;
     b.hp--;
-    step.effects.push({ id: this.fx(), type: "shard", r, c, kind: b.kind });
+    step.effects.push({ id: this.fx(), type: "shard", r, c, kind: b.kind, delay });
     step.sounds.add(b.kind);
     this.score += 40;
     if (b.hp <= 0) {
@@ -611,11 +628,11 @@ export class Engine {
     }
   }
 
-  private damageIce(r: number, c: number, step: Step) {
+  private damageIce(r: number, c: number, step: Step, delay = 0) {
     const cell = this.cells[r][c];
     if (cell.ice <= 0) return;
     cell.ice--;
-    step.effects.push({ id: this.fx(), type: "shard", r, c, kind: "ice" });
+    step.effects.push({ id: this.fx(), type: "shard", r, c, kind: "ice", delay });
     step.sounds.add("ice");
     this.score += 30;
     if (cell.ice === 0) this.collect("ice", step, r, c);
@@ -991,6 +1008,7 @@ export class Engine {
       kind,
       cells,
       effects: step ? step.effects : [],
+      removed: step ? Object.fromEntries(step.removed) : {},
       goals: this.goals.map((g) => ({ ...g })),
       score: this.score,
       movesLeft: this.movesLeft,

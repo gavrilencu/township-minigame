@@ -1,111 +1,90 @@
 import { memo, type ReactNode } from "react";
 import type { BlockerKind, GoalKind, SpecialKind, Tile } from "@/lib/game/types";
 
-/** Tones per piece color: bevel, face, side wall and the raised symbol. */
+/**
+ * Candy palette. `glow` is the light passing through the jelly, `depth` the darkest core
+ * (also used for outlines of score popups), `base/light/dark` drive the particles.
+ */
 export const GEM_COLORS = [
-  { name: "Roșu", base: "#ff3d4f", light: "#ff9aa5", dark: "#c8102c", depth: "#7d0618", sym: "#ffe3e6", rim: "#ffc4ca" },
-  { name: "Albastru", base: "#2196ff", light: "#8fd0ff", dark: "#0f5fd1", depth: "#082f7a", sym: "#e2f3ff", rim: "#bfe5ff" },
-  { name: "Galben", base: "#ffc70f", light: "#ffeb7a", dark: "#ea8a00", depth: "#8f4f00", sym: "#fffbe2", rim: "#fff3b0" },
-  { name: "Verde", base: "#3ccf45", light: "#a6f08c", dark: "#178f2a", depth: "#0a5216", sym: "#ebffe2", rim: "#c9f7b4" },
-  { name: "Mov", base: "#b052ff", light: "#dba8ff", dark: "#6f22d6", depth: "#3d0c85", sym: "#f6ebff", rim: "#e6c9ff" },
-  { name: "Alb", base: "#eef1fb", light: "#ffffff", dark: "#aab4d6", depth: "#5f6a93", sym: "#ffffff", rim: "#ffffff" },
+  { name: "Inimioară", base: "#f2203f", light: "#ff9fae", dark: "#9c0720", depth: "#5e0412", glow: "#ff6f86", rim: "#ffc2cc" },
+  { name: "Spirală", base: "#2e86ff", light: "#a9d4ff", dark: "#0b44a3", depth: "#05265e", glow: "#78b6ff", rim: "#cfe6ff" },
+  { name: "Steluță", base: "#ffc107", light: "#fff3a6", dark: "#d57800", depth: "#7a4100", glow: "#ffe36b", rim: "#fff7cf" },
+  { name: "Cub", base: "#35c23c", light: "#bdf5a0", dark: "#147523", depth: "#0a4214", glow: "#8be774", rim: "#dcffd0" },
+  { name: "Bob", base: "#a23ae6", light: "#e5b8ff", dark: "#56128f", depth: "#310955", glow: "#cb83ff", rim: "#f0dcff" },
+  { name: "Picătură", base: "#ff8418", light: "#ffd3a1", dark: "#c14700", depth: "#6e2700", glow: "#ffb066", rim: "#ffe6cc" },
 ];
 
-const SHAPES = [
-  // rounded square
-  "M50 6 C83 6 94 17 94 50 C94 83 83 94 50 94 C17 94 6 83 6 50 C6 17 17 6 50 6 Z",
-  // rounded triangle, point down
-  "M19 11 H81 Q98 11 90 27 L61 85 Q50 102 39 85 L10 27 Q2 11 19 11 Z",
-  // rounded hexagon
-  "M31 8 H69 Q77 8 81 15 L94 42 Q97 50 94 58 L81 85 Q77 92 69 92 H31 Q23 92 19 85 L6 58 Q3 50 6 42 L19 15 Q23 8 31 8 Z",
-  // rounded diamond
-  "M50 4 Q57 4 63 10 L90 37 Q96 43 96 50 Q96 57 90 63 L63 90 Q57 96 50 96 Q43 96 37 90 L10 63 Q4 57 4 50 Q4 43 10 37 L37 10 Q43 4 50 4 Z",
-  // circle
-  "M50 6 A44 44 0 1 1 49.9 6 Z",
-  // rounded octagon
-  "M33 6 H67 Q73 6 77 10 L90 23 Q94 27 94 33 V67 Q94 73 90 77 L77 90 Q73 94 67 94 H33 Q27 94 23 90 L10 77 Q6 73 6 67 V33 Q6 27 10 23 L23 10 Q27 6 33 6 Z",
-];
-
-/** Where the symbol sits: the triangle's visual centre is higher than the box centre. */
-const SYMBOL_SHIFT = [0, -7, 0, 0, 0, 0];
-
-function SymbolPath({ color, fill }: { color: number; fill: string }) {
-  switch (color) {
-    case 0:
-      return <path d="M50 72 C33 62 26 52 28 43 C30 34 42 31 50 41 C58 31 70 34 72 43 C74 52 67 62 50 72 Z" fill={fill} />;
-    case 1:
-      return <path d="M50 28 C58 38 65 46 65 53 C65 61 58 67 50 67 C42 67 35 61 35 53 C35 46 42 38 50 28 Z" fill={fill} />;
-    case 2:
-      return (
-        <g fill={fill} stroke={fill} strokeLinecap="round">
-          <circle cx="50" cy="50" r="11.5" stroke="none" />
-          {Array.from({ length: 8 }, (_, i) => {
-            const a = (i * Math.PI) / 4;
-            return (
-              <line key={i} x1={50 + Math.cos(a) * 17.5} y1={50 + Math.sin(a) * 17.5} x2={50 + Math.cos(a) * 24} y2={50 + Math.sin(a) * 24} strokeWidth="5.5" />
-            );
-          })}
-        </g>
-      );
-    case 3:
-      return <path d="M32 67 C31 47 44 34 68 33 C68 56 55 68 32 67 Z" fill={fill} />;
-    case 4:
-      return <path d="M56 28 A23 23 0 1 0 73 62 A19 19 0 0 1 56 28 Z" fill={fill} />;
-    default:
-      return (
-        <path
-          d="M50 27 L56.5 43 L73 44 L60 54.5 L64.5 71 L50 61.5 L35.5 71 L40 54.5 L27 44 L43.5 43 Z"
-          fill={fill}
-          strokeLinejoin="round"
-          stroke={fill}
-          strokeWidth="3"
-        />
-      );
+const HEART =
+  "M50 87 C23 70 9 55 11 37 C13 21 27 12 39 14 C45 15 49 19 50 24 C51 19 55 15 61 14 C73 12 87 21 89 37 C91 55 77 70 50 87 Z";
+const STAR = (() => {
+  const pts: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 ? 19 : 40;
+    pts.push(`${(50 + Math.cos(a) * r).toFixed(1)},${(52 + Math.sin(a) * r).toFixed(1)}`);
   }
-}
+  return pts.join(" ");
+})();
+const DROP = "M13 79 C13 43 29 14 50 14 C71 14 87 43 87 79 Q87 87 79 87 H21 Q13 87 13 79 Z";
 
-/** Shared gradients and clip paths, rendered once per screen. */
+/** Curved white stripes of the swirl candy. */
+const SWIRL = Array.from({ length: 6 }, (_, k) => {
+  const a = (k * Math.PI) / 3;
+  const R = 39;
+  const p = (ang: number, r: number) => `${(50 + Math.cos(ang) * r).toFixed(1)} ${(49 + Math.sin(ang) * r).toFixed(1)}`;
+  return `M50 49 Q${p(a + 0.75, 26)} ${p(a, R)} A${R} ${R} 0 0 1 ${p(a + 0.42, R)} Q${p(a + 1.05, 22)} 50 49 Z`;
+});
+
+/** Shared gradients, patterns and clip paths, rendered once per screen. */
 export function GemDefs() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
       <defs>
         {GEM_COLORS.map((g, i) => (
-          <linearGradient key={`v${i}`} id={`bevel${i}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={g.rim} />
-            <stop offset="0.45" stopColor={g.base} />
-            <stop offset="1" stopColor={g.dark} />
-          </linearGradient>
-        ))}
-        {GEM_COLORS.map((g, i) => (
-          <linearGradient key={`f${i}`} id={`face${i}`} x1="0.2" y1="0" x2="0.8" y2="1">
+          <radialGradient key={`b${i}`} id={`cBody${i}`} cx="0.36" cy="0.3" r="0.78">
             <stop offset="0" stopColor={g.light} />
-            <stop offset="0.5" stopColor={g.base} />
-            <stop offset="1" stopColor={g.dark} />
-          </linearGradient>
+            <stop offset="0.42" stopColor={g.base} />
+            <stop offset="0.85" stopColor={g.dark} />
+            <stop offset="1" stopColor={g.depth} />
+          </radialGradient>
         ))}
         {GEM_COLORS.map((g, i) => (
-          <linearGradient key={`s${i}`} id={`sym${i}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#fff" />
-            <stop offset="1" stopColor={g.sym} />
-          </linearGradient>
+          <radialGradient key={`g${i}`} id={`cGlow${i}`} cx="0.62" cy="0.78" r="0.45">
+            <stop offset="0" stopColor={g.glow} stopOpacity="0.95" />
+            <stop offset="1" stopColor={g.glow} stopOpacity="0" />
+          </radialGradient>
         ))}
-        {SHAPES.map((d, i) => (
-          <clipPath key={`c${i}`} id={`face-clip${i}`}>
-            <path d={d} transform="translate(9 9) scale(0.82)" />
-          </clipPath>
-        ))}
-        <clipPath id="topHalf">
-          <rect x="0" y="0" width="100" height="46" />
-        </clipPath>
-        <radialGradient id="faceDome" cx="0.42" cy="0.32" r="0.62">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.42" />
-          <stop offset="0.6" stopColor="#fff" stopOpacity="0.05" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.12" />
+        <radialGradient id="cShadow">
+          <stop offset="0" stopColor="#0d1a4a" stopOpacity="0.42" />
+          <stop offset="1" stopColor="#0d1a4a" stopOpacity="0" />
         </radialGradient>
-        <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="cSpec" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity="0.95" />
-          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0.1" />
         </linearGradient>
+        <radialGradient id="cSphere" cx="0.35" cy="0.3" r="0.75">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.35" />
+          <stop offset="0.55" stopColor="#fff" stopOpacity="0" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.38" />
+        </radialGradient>
+        <pattern id="cSugar" width="7" height="7" patternUnits="userSpaceOnUse">
+          <circle cx="1.5" cy="1.8" r="0.9" fill="#fff" opacity="0.9" />
+          <circle cx="5.2" cy="4.6" r="0.7" fill="#fff" opacity="0.75" />
+          <rect x="3.6" y="0.8" width="1.1" height="1.1" fill="#fff" opacity="0.6" transform="rotate(30 4 1.3)" />
+        </pattern>
+        <pattern id="cSpeckle" width="11" height="9" patternUnits="userSpaceOnUse">
+          <ellipse cx="2.5" cy="2.5" rx="1.4" ry="1" fill="#3a0a66" opacity="0.55" />
+          <ellipse cx="8" cy="6.5" rx="1.1" ry="0.8" fill="#3a0a66" opacity="0.45" />
+        </pattern>
+        <clipPath id="clipSwirl">
+          <circle cx="50" cy="49" r="39" />
+        </clipPath>
+        <clipPath id="clipCube">
+          <rect x="14" y="14" width="72" height="72" rx="18" />
+        </clipPath>
+        <clipPath id="clipDrop">
+          <path d={DROP} />
+        </clipPath>
         <linearGradient id="rocketBody" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#ffb0a8" />
           <stop offset="0.45" stopColor="#ff4040" />
@@ -168,33 +147,113 @@ export function GemDefs() {
   );
 }
 
-/**
- * A chunky 3D candy block: soft shadow, side wall, bevelled rim lit from above,
- * a domed face and a raised symbol with its own shadow and shine.
- */
-export const Gem = memo(function Gem({ color, className }: { color: number; className?: string }) {
+/** Soft contact shadow under every candy. */
+const Shadow = ({ rx = 31 }: { rx?: number }) => <ellipse cx="51" cy="92" rx={rx} ry="6.5" fill="url(#cShadow)" />;
+
+/** Hard white glint plus a softer secondary reflection: the "wet" look of candy. */
+const Glints = ({ x, y, rot = -32, w = 11, h = 6 }: { x: number; y: number; rot?: number; w?: number; h?: number }) => (
+  <>
+    <ellipse cx={x} cy={y} rx={w} ry={h} fill="url(#cSpec)" transform={`rotate(${rot} ${x} ${y})`} />
+    <circle cx={x + w * 0.95} cy={y - h * 0.6} r="2.2" fill="#fff" opacity="0.95" />
+  </>
+);
+
+function Candy({ color }: { color: number }) {
   const c = GEM_COLORS[color] ?? GEM_COLORS[0];
-  const d = SHAPES[color] ?? SHAPES[0];
-  const dy = SYMBOL_SHIFT[color] ?? 0;
+  switch (color) {
+    case 0: // translucent jelly heart
+      return (
+        <>
+          <Shadow rx={30} />
+          <path d={HEART} fill={`url(#cBody0)`} />
+          <path d={HEART} fill={`url(#cGlow0)`} />
+          <path d="M22 58 C30 70 40 77 50 83 C60 77 70 70 78 58" fill="none" stroke={c.rim} strokeOpacity="0.55" strokeWidth="2.2" strokeLinecap="round" />
+          <path d={HEART} fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.6" />
+          <path d="M20 34 C21 25 29 20 36 21 C33 25 28 30 25 39 Z" fill="#fff" opacity="0.35" />
+          <Glints x={31} y={31} />
+          <circle cx="68" cy="27" r="3.2" fill="#fff" opacity="0.8" />
+        </>
+      );
+    case 1: // hard swirl candy
+      return (
+        <>
+          <Shadow rx={31} />
+          <circle cx="50" cy="49" r="39" fill={`url(#cBody1)`} />
+          <g clipPath="url(#clipSwirl)">
+            {SWIRL.map((d, i) => (
+              <path key={i} d={d} fill="#f2f8ff" opacity="0.92" />
+            ))}
+            <circle cx="50" cy="49" r="39" fill="url(#cSphere)" />
+            <circle cx="50" cy="49" r="39" fill={`url(#cGlow1)`} opacity="0.55" />
+          </g>
+          <circle cx="50" cy="49" r="38.2" fill="none" stroke={c.rim} strokeOpacity="0.5" strokeWidth="1.6" />
+          <circle cx="50" cy="49" r="39" fill="none" stroke={c.depth} strokeOpacity="0.4" strokeWidth="1.4" />
+          <Glints x={34} y={28} w={13} h={6.5} />
+        </>
+      );
+    case 2: // jelly star
+      return (
+        <>
+          <Shadow rx={30} />
+          <polygon points={STAR} fill={`url(#cBody2)`} stroke={`url(#cBody2)`} strokeWidth="9" strokeLinejoin="round" />
+          <polygon points={STAR} fill={`url(#cGlow2)`} stroke={`url(#cGlow2)`} strokeWidth="9" strokeLinejoin="round" />
+          <polygon points={STAR} fill="none" stroke={c.rim} strokeOpacity="0.45" strokeWidth="1.6" strokeLinejoin="round" transform="translate(50 52) scale(0.82) translate(-50 -52)" />
+          <path d="M44 22 L48 15 L50 24 Z M27 41 L35 39 L33 45 Z" fill="#fff" opacity="0.55" />
+          <Glints x={42} y={33} w={9} h={5} />
+        </>
+      );
+    case 3: // sugared jelly cube
+      return (
+        <>
+          <Shadow rx={33} />
+          <rect x="14" y="14" width="72" height="72" rx="18" fill={`url(#cBody3)`} />
+          <g clipPath="url(#clipCube)">
+            <rect x="14" y="14" width="72" height="72" fill={`url(#cGlow3)`} />
+            <path d="M14 14 H86 V30 Q50 24 14 30 Z" fill="#fff" opacity="0.18" />
+            <rect x="14" y="14" width="72" height="72" fill="url(#cSugar)" opacity="0.85" />
+          </g>
+          <rect x="14.8" y="14.8" width="70.4" height="70.4" rx="17.4" fill="none" stroke={c.rim} strokeOpacity="0.55" strokeWidth="1.6" />
+          <rect x="14" y="14" width="72" height="72" rx="18" fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.4" />
+          <Glints x={32} y={27} w={12} h={5.5} rot={-18} />
+        </>
+      );
+    case 4: // speckled jelly bean
+      return (
+        <>
+          <Shadow rx={33} />
+          <g transform="rotate(-24 50 50)">
+            <rect x="8" y="24" width="84" height="52" rx="26" fill={`url(#cBody4)`} />
+            <rect x="8" y="24" width="84" height="52" rx="26" fill={`url(#cGlow4)`} />
+            <rect x="8" y="24" width="84" height="52" rx="26" fill="url(#cSpeckle)" />
+            <rect x="8.8" y="24.8" width="82.4" height="50.4" rx="25.2" fill="none" stroke={c.rim} strokeOpacity="0.5" strokeWidth="1.5" />
+            <rect x="8" y="24" width="84" height="52" rx="26" fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.4" />
+            <rect x="20" y="30" width="48" height="10" rx="5" fill="url(#cSpec)" opacity="0.9" />
+            <circle cx="75" cy="34" r="2.6" fill="#fff" opacity="0.9" />
+          </g>
+        </>
+      );
+    default: // sugar-coated gumdrop
+      return (
+        <>
+          <Shadow rx={34} />
+          <path d={DROP} fill={`url(#cBody5)`} />
+          <g clipPath="url(#clipDrop)">
+            <path d={DROP} fill={`url(#cGlow5)`} />
+            <rect x="10" y="10" width="80" height="80" fill="url(#cSugar)" opacity="0.9" />
+            <path d="M13 79 Q50 70 87 79 V90 H13 Z" fill={c.depth} opacity="0.25" />
+          </g>
+          <path d={DROP} fill="none" stroke={c.depth} strokeOpacity="0.35" strokeWidth="1.4" />
+          <Glints x={35} y={32} w={10} h={6} rot={-40} />
+        </>
+      );
+  }
+}
+
+/** A realistic 3D candy, one shape per color. */
+export const Gem = memo(function Gem({ color, className }: { color: number; className?: string }) {
   return (
-    <svg viewBox="0 0 100 110" className={className} aria-hidden>
-      <path d={d} transform="translate(2 11)" fill="#0b1440" opacity="0.22" />
-      <path d={d} transform="translate(0 7)" fill={c.depth} />
-      <path d={d} fill={`url(#bevel${color})`} />
-      <path d={d} fill="none" stroke="#fff" strokeOpacity="0.7" strokeWidth="2.6" clipPath="url(#topHalf)" />
-      <path d={d} transform="translate(9 9) scale(0.82)" fill={`url(#face${color})`} />
-      <path d={d} transform="translate(9 9) scale(0.82)" fill="url(#faceDome)" />
-      <path d={d} transform="translate(9 9) scale(0.82)" fill="none" stroke={c.dark} strokeOpacity="0.35" strokeWidth="2.4" />
-      <g transform={`translate(0 ${dy})`}>
-        <g transform="translate(0 3.2)" opacity="0.5">
-          <SymbolPath color={color} fill={c.depth} />
-        </g>
-        <SymbolPath color={color} fill={`url(#sym${color})`} />
-      </g>
-      <g clipPath={`url(#face-clip${color})`}>
-        <ellipse cx="44" cy="20" rx="34" ry="14" fill="url(#gloss)" opacity="0.75" />
-      </g>
-      <path d="M74 22 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2 l5 -2 Z" fill="#fff" opacity="0.9" />
+    <svg viewBox="0 0 100 100" className={className} aria-hidden>
+      <Candy color={color} />
     </svg>
   );
 });

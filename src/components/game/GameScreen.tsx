@@ -131,7 +131,8 @@ export function GameScreen({
     if (!fx.length) return;
     setEffects((prev) => [...prev, ...fx]);
     const ids = new Set(fx.map((f) => f.id));
-    setTimeout(() => alive.current && setEffects((prev) => prev.filter((e) => !ids.has(e.id))), 1250);
+    // long enough for the slowest debris of a delayed ripple to land
+    setTimeout(() => alive.current && setEffects((prev) => prev.filter((e) => !ids.has(e.id))), 1800);
   }, []);
 
   /** Collected pieces fly from the board to their goal in the side panel. */

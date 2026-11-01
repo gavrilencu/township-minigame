@@ -17,7 +17,7 @@ export function HowToPlay() {
           <Gem color={1} className="h-8 w-8" />
           <Gem color={1} className="h-8 w-8" />
         </div>
-        <p className="text-[14px] leading-snug font-medium">Glisează o bijuterie ca să aliniezi 3 sau mai multe la fel.</p>
+        <p className="text-[14px] leading-snug font-medium">Glisează o bomboană ca să aliniezi 3 sau mai multe la fel.</p>
       </div>
       {ROWS.map((r) => (
         <div key={r.kind} className="panel-inset flex items-center gap-3 p-2.5">

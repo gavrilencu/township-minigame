@@ -10,7 +10,7 @@ const fredoka = Fredoka({
 
 export const metadata: Metadata = {
   title: "Djesi Jewels",
-  description: "Joc de potrivit bijuterii cu nivele infinite, ajutoare și prieteni.",
+  description: "Joc de potrivit bomboane cu nivele infinite, ajutoare și prieteni.",
   applicationName: "Djesi Jewels",
   appleWebApp: {
     capable: true,
