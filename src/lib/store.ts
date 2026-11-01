@@ -7,6 +7,9 @@ import type { FriendDTO, LevelResultDTO, PlayerDTO } from "./shared";
 export const USERNAME_KEY = "djesi.username";
 const SOUND_KEY = "djesi.sound";
 const MUSIC_KEY = "djesi.music";
+const GFX_KEY = "djesi.gfx";
+
+export type Gfx = "auto" | "high" | "low";
 
 export interface Toast {
   id: number;
@@ -20,7 +23,13 @@ interface State {
   friends: FriendDTO[];
   sound: boolean;
   music: boolean;
+  /** graphics setting; "auto" follows the low-power probe */
+  gfx: Gfx;
+  /** the device looked slow when probed */
+  autoLite: boolean;
   toasts: Toast[];
+  setGfx: (g: Gfx) => void;
+  setAutoLite: (v: boolean) => void;
   setSession: (player: PlayerDTO, results: LevelResultDTO[]) => void;
   setPlayer: (player: PlayerDTO) => void;
   setResult: (r: LevelResultDTO) => void;
@@ -49,13 +58,34 @@ function writeFlag(key: string, on: boolean) {
   } catch {}
 }
 
+function readGfx(): Gfx {
+  try {
+    const v = localStorage.getItem(GFX_KEY);
+    return v === "high" || v === "low" ? v : "auto";
+  } catch {
+    return "auto";
+  }
+}
+
+/** Lighter graphics: chosen by the player, or picked automatically on a slow device. */
+export const selectLite = (s: { gfx: Gfx; autoLite: boolean }) => s.gfx === "low" || (s.gfx === "auto" && s.autoLite);
+
 export const useGame = create<State>((set, get) => ({
   player: null,
   results: {},
   friends: [],
   sound: typeof window === "undefined" ? true : readFlag(SOUND_KEY),
   music: typeof window === "undefined" ? true : readFlag(MUSIC_KEY),
+  gfx: typeof window === "undefined" ? "auto" : readGfx(),
+  autoLite: false,
   toasts: [],
+  setGfx: (gfx) => {
+    try {
+      localStorage.setItem(GFX_KEY, gfx);
+    } catch {}
+    set({ gfx });
+  },
+  setAutoLite: (autoLite) => set({ autoLite }),
   setSession: (player, results) => {
     try {
       localStorage.setItem(USERNAME_KEY, player.username);

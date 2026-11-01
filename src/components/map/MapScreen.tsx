@@ -6,7 +6,7 @@ import { levelDifficulty } from "@/lib/game/levels";
 import { mulberry32 } from "@/lib/game/rng";
 import type { FriendDTO, LevelResultDTO } from "@/lib/shared";
 import { play } from "@/lib/sound";
-import { useGame } from "@/lib/store";
+import { selectLite, useGame } from "@/lib/store";
 import { LEVELS_PER_WORLD, worldOf, worldTheme } from "@/lib/worlds";
 import { GiftGlyph } from "../art/Icons";
 import { Decor, shade } from "../art/MapDecor";
@@ -46,6 +46,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
   const player = useGame((s) => s.player)!;
   const results = useGame((s) => s.results);
   const friends = useGame((s) => s.friends);
+  const lite = useGame(selectLite);
   const currentRef = useRef<HTMLButtonElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const current = player.level;
@@ -114,6 +115,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
             key={w}
             world={w}
             segLeft={left0 + (w - firstWorld) * SEG_W}
+            lite={lite}
             current={current}
             results={results}
             friendsAt={friendsAt}
@@ -159,6 +161,7 @@ export function MapScreen({ onOpenLevel, onDaily }: { onOpenLevel: (n: number) =
 const WorldSegment = memo(function WorldSegment({
   world,
   segLeft,
+  lite,
   current,
   results,
   friendsAt,
@@ -169,6 +172,7 @@ const WorldSegment = memo(function WorldSegment({
   world: number;
   /** x of this segment inside the scroll content */
   segLeft: number;
+  lite: boolean;
   current: number;
   results: Record<number, LevelResultDTO>;
   friendsAt: Map<number, FriendDTO[]>;
@@ -190,7 +194,7 @@ const WorldSegment = memo(function WorldSegment({
     size: 46 + rng() * 40,
     flip: rng() < 0.5,
   }));
-  const far = Array.from({ length: 14 }, () => ({
+  const far = Array.from({ length: lite ? 6 : 12 }, () => ({
     kind: theme.decor[Math.floor(rng() * theme.decor.length)],
     left: rng() * SEG_W * 1.3,
     top: 34 + rng() * 7,
@@ -225,7 +229,7 @@ const WorldSegment = memo(function WorldSegment({
           ) : (
             <div className="absolute right-[18%] top-[6%] h-20 w-20 rounded-full bg-[#fff3b0] shadow-[0_0_60px_24px_rgb(255_240_170_/_0.5)]" />
           )}
-          {[0.1, 0.45, 0.8].map((x, i) => (
+          {(lite ? [0.3] : [0.1, 0.45, 0.8]).map((x, i) => (
             <div
               key={i}
               className={`absolute ${["cloud-drift-a", "cloud-drift-b", "cloud-drift-c"][i]}`}
@@ -253,7 +257,7 @@ const WorldSegment = memo(function WorldSegment({
         <path d={`M0 88 Q${SEG_W * 0.25} 83 ${SEG_W * 0.5} 87 T${SEG_W} 86 V100 H0 Z`} fill={theme.ground} />
       </svg>
 
-      <WorldParticles kind={theme.particles} seed={world} count={10} />
+      {!lite && <WorldParticles kind={theme.particles} seed={world} count={10} />}
 
       {/* cobbled path */}
       <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${SEG_W} 100`} preserveAspectRatio="none" aria-hidden>
@@ -269,7 +273,7 @@ const WorldSegment = memo(function WorldSegment({
           className="pointer-events-none absolute"
           style={{ left: x.left, bottom: `${x.bottom}%`, width: x.size, height: x.size, transform: x.flip ? "scaleX(-1)" : undefined }}
         >
-          <Decor kind={x.kind} color={theme.hillNear} className="h-full w-full drop-shadow-[0_4px_3px_rgb(0_0_0_/_0.25)]" />
+          <Decor kind={x.kind} color={theme.hillNear} className="h-full w-full" />
         </div>
       ))}
 

@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useAnimate } from "motion/react";
 import { Hammer } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { fallSeconds } from "@/lib/game/engine";
+import { ParticleSystem, type DebrisKind } from "@/lib/particles";
 import type { Cell, Effect, Frame, FrameKind, Pos, Tile, TileExit } from "@/lib/game/types";
 import { BlockerArt, GEM_COLORS, GrassArt, IceArt, LockArt, PieceArt, SpecialArt } from "../art/Pieces";
 
@@ -12,6 +13,8 @@ interface BoardProps {
   S: number;
   /** bitmap per colour for the current cell size; null until drawn (SVG is used meanwhile) */
   sprites: string[] | null;
+  /** lighter effects for slow phones */
+  lite: boolean;
   effects: Effect[];
   selected: Pos | null;
   hint: Pos[] | null;
@@ -33,7 +36,7 @@ function nudgeFor(hint: Pos[] | null, r: number, c: number): { dx: number; dy: n
   return other ? { dx: other.c - c, dy: other.r - r } : { dx: 0, dy: 0 };
 }
 
-export function Board({ frame, S, sprites, effects, selected, hint, targeting, boardRef, onSwipe, onTap }: BoardProps) {
+export function Board({ frame, S, sprites, lite, effects, selected, hint, targeting, boardRef, onSwipe, onTap }: BoardProps) {
   const cells = frame.cells;
   const rows = cells.length;
   const cols = cells[0].length;
@@ -235,7 +238,7 @@ export function Board({ frame, S, sprites, effects, selected, hint, targeting, b
 
       {targeting && <div className="pointer-events-none absolute -inset-1.5 animate-pulse rounded-2xl ring-4 ring-[#ffd23f]" />}
 
-      <EffectsLayer effects={effects} S={S} W={W} H={H} />
+      <EffectsLayer effects={effects} S={S} W={W} H={H} lite={lite} />
     </div>
   );
 }
@@ -310,6 +313,14 @@ const TileView = memo(
             transition: { duration: 0.2, ease: "easeIn" as const },
           };
         }
+        // Many pieces at once (bombs, rockets): a plain pop, no per-piece filter work.
+        if (removed && Object.keys(removed).length > 10) {
+          return {
+            scale: [1, 1.18, 0],
+            opacity: [1, 1, 0],
+            transition: { duration: how?.blast ? 0.22 : 0.3, delay: how?.delay ?? 0, times: [0, 0.4, 1] },
+          };
+        }
         // Swell and flash white, then burst.
         return {
           scale: [1, 1.22, 1.32, 0],
@@ -326,7 +337,7 @@ const TileView = memo(
       : undefined;
     return (
       <motion.div
-        className="absolute left-0 top-0"
+        className="absolute left-0 top-0 will-change-transform"
         style={{ width: S, height: S, padding: pad, zIndex: front ? 5 : undefined }}
         variants={variants}
         initial={{ x: c * S, y: (tile.born ? r : (tile.spawnRow ?? r)) * S, scale: tile.born ? 0 : 1 }}
@@ -382,23 +393,12 @@ const TileView = memo(
 /* Effects                                                             */
 /* ------------------------------------------------------------------ */
 
-type ShardKind = "gem" | "crate" | "cloud" | "ice" | "lock";
-
-const SHARD_COLORS: Record<Exclude<ShardKind, "gem">, string[]> = {
+const SHARD_COLORS: Record<Exclude<DebrisKind, "gem">, string[]> = {
   crate: ["#d08a45", "#f7c98c", "#a86a33"],
   cloud: ["#ffffff", "#ffd6ec", "#ffb3da"],
   ice: ["#e9f9ff", "#b5e4ff", "#ffffff"],
   lock: ["#dfe3ef", "#9aa3c0", "#ffc93c"],
 };
-
-const SHARD_CLIPS = [
-  "polygon(50% 0, 100% 65%, 25% 100%)",
-  "polygon(0 20%, 80% 0, 100% 75%, 30% 100%)",
-  "polygon(20% 0, 100% 30%, 60% 100%, 0 70%)",
-  "polygon(50% 0, 90% 50%, 50% 100%, 10% 50%)",
-];
-
-const STAR_CLIP = "polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%)";
 
 /** How loud each cascade banner gets: size and colour grow with the level. */
 const BANNER_LEVEL: Record<string, number> = {
@@ -413,111 +413,82 @@ const BANNER_LEVEL: Record<string, number> = {
 };
 
 /**
- * A burst of debris. Pieces fly out, slow down and fall under gravity while spinning;
- * a few sparkles twinkle out and the colored flash marks the impact.
+ * Every burst, flash and ring is drawn on this one canvas, fed from the effect list.
+ * The canvas is one cell larger than the board on each side so debris can fly out.
  */
-function Burst({ x, y, kind, colors, S, seed, delay }: { x: number; y: number; kind: ShardKind; colors: string[]; S: number; seed: number; delay: number }) {
-  const count = kind === "cloud" ? 7 : kind === "crate" ? 7 : 9;
-  const rnd = (i: number, m: number) => ((seed * 31 + i * 17) % m) / m;
-  const wait = `${delay}s`;
-  return (
-    <>
-      <div className="fx-flash" style={{ left: x, top: y, width: S * 1.3, height: S * 1.3, animationDelay: wait }} />
-      {kind === "gem" && (
-        <div className="fx-ring" style={{ left: x, top: y, width: S * 1.1, height: S * 1.1, borderColor: colors[1], animationDelay: wait }} />
-      )}
-      {Array.from({ length: count }, (_, i) => {
-        const ang = (i / count) * Math.PI * 2 + rnd(i, 10) * 0.8;
-        const reach = S * (kind === "cloud" ? 0.45 : 0.55 + rnd(i, 7) * 0.5);
-        const base = {
-          left: x,
-          top: y,
-          animationDelay: wait,
-          "--dx": `${Math.cos(ang) * reach}px`,
-          "--dy": `${Math.sin(ang) * reach - S * 0.35}px`,
-          "--fall": `${S * (0.9 + rnd(i, 5) * 0.6)}px`,
-          "--rot": `${(i % 2 ? 1 : -1) * (200 + rnd(i, 9) * 300)}deg`,
-        } as React.CSSProperties;
-        if (kind === "cloud") {
-          const size = S * (0.32 + rnd(i, 4) * 0.2);
-          return <div key={i} className="fx-puff" style={{ ...base, width: size, height: size, background: colors[i % colors.length] }} />;
+function ParticleCanvas({ effects, S, W, H, lite }: { effects: Effect[]; S: number; W: number; H: number; lite: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sys = useRef<ParticleSystem | null>(null);
+  const seen = useRef(new Set<number>());
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ps = new ParticleSystem(c);
+    sys.current = ps;
+    return () => {
+      ps.stop();
+      sys.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    sys.current?.resize(W, H, S);
+  }, [W, H, S]);
+
+  useEffect(() => {
+    const ps = sys.current;
+    if (!ps) return;
+    const cx = (c: number) => c * S + S / 2;
+    const cy = (r: number) => r * S + S / 2;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    for (const e of effects) {
+      if (seen.current.has(e.id)) continue;
+      switch (e.type) {
+        case "pop": {
+          const g = GEM_COLORS[e.color] ?? GEM_COLORS[0];
+          if (!reduced) ps.burst(cx(e.c), cy(e.r), "gem", [g.base, g.light, g.dark], S, e.id, e.delay, !lite);
+          break;
         }
-        if (kind === "crate") {
-          return (
-            <div
-              key={i}
-              className="fx-shard"
-              style={{ ...base, width: S * 0.42, height: S * 0.13, borderRadius: 3, background: colors[i % colors.length], boxShadow: "inset 0 -2px 0 rgb(92 51 23 / 0.5)" }}
-            />
-          );
-        }
-        if (kind === "lock") {
-          const size = S * 0.2;
-          return <div key={i} className="fx-shard" style={{ ...base, width: size, height: size * 0.7, borderRadius: size, border: `${Math.max(2, S * 0.05)}px solid ${colors[i % colors.length]}` }} />;
-        }
-        const size = S * (0.16 + rnd(i, 6) * 0.14);
-        return (
-          <div
-            key={i}
-            className="fx-shard"
-            style={{
-              ...base,
-              width: size,
-              height: size,
-              background: `linear-gradient(135deg, ${colors[1]}, ${colors[0]} 55%, ${colors[2]})`,
-              clipPath: SHARD_CLIPS[i % SHARD_CLIPS.length],
-            }}
-          />
-        );
-      })}
-      {kind !== "cloud" &&
-        Array.from({ length: 3 }, (_, i) => {
-          const ang = rnd(i + 20, 13) * Math.PI * 2;
-          const size = S * (0.18 + rnd(i, 3) * 0.1);
-          return (
-            <div
-              key={`s${i}`}
-              className="fx-spark"
-              style={
-                {
-                  left: x,
-                  top: y,
-                  width: size,
-                  height: size,
-                  clipPath: STAR_CLIP,
-                  background: i % 2 ? "#fff6b3" : "#ffffff",
-                  animationDelay: `${delay + i * 0.05}s`,
-                  "--dx": `${Math.cos(ang) * S * 0.8}px`,
-                  "--dy": `${Math.sin(ang) * S * 0.8}px`,
-                } as React.CSSProperties
-              }
-            />
-          );
-        })}
-    </>
-  );
+        case "shard":
+          if (!reduced) ps.burst(cx(e.c), cy(e.r), e.kind, SHARD_COLORS[e.kind], S, e.id, e.delay, !lite);
+          break;
+        case "blast":
+          ps.blast(cx(e.c), cy(e.r), Math.min((e.radius * 2 + 1) * S * 1.15, Math.max(W, H) * 1.6));
+          break;
+        case "create":
+          ps.ring(cx(e.c), cy(e.r), S * 2.2);
+          break;
+        case "hammer":
+          ps.ring(cx(e.c), cy(e.r), S * 1.8);
+          break;
+        default:
+          continue;
+      }
+      seen.current.add(e.id);
+    }
+    if (seen.current.size > 400) {
+      const live = new Set(effects.map((e) => e.id));
+      for (const id of seen.current) if (!live.has(id)) seen.current.delete(id);
+    }
+  }, [effects, S, W, H, lite]);
+
+  return <canvas ref={canvasRef} className="pointer-events-none absolute" style={{ left: -S, top: -S }} />;
 }
 
-const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H }: { effects: Effect[]; S: number; W: number; H: number }) {
+const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H, lite }: { effects: Effect[]; S: number; W: number; H: number; lite: boolean }) {
   const cx = (c: number) => c * S + S / 2;
   const cy = (r: number) => r * S + S / 2;
   return (
     <div className="pointer-events-none absolute inset-0">
+      <ParticleCanvas effects={effects} S={S} W={W} H={H} lite={lite} />
       {effects.map((e) => {
         switch (e.type) {
-          case "pop": {
-            const g = GEM_COLORS[e.color] ?? GEM_COLORS[0];
-            return <Burst key={e.id} x={cx(e.c)} y={cy(e.r)} kind="gem" colors={[g.base, g.light, g.dark]} S={S} seed={e.id} delay={e.delay} />;
-          }
+          case "pop":
           case "shard":
-            return <Burst key={e.id} x={cx(e.c)} y={cy(e.r)} kind={e.kind} colors={SHARD_COLORS[e.kind]} S={S} seed={e.id} delay={e.delay} />;
           case "create":
-            return (
-              <div key={e.id}>
-                <div className="fx-ring" style={{ left: cx(e.c), top: cy(e.r), width: S * 2.2, height: S * 2.2 }} />
-                <div className="fx-flash" style={{ left: cx(e.c), top: cy(e.r), width: S * 2, height: S * 2 }} />
-              </div>
-            );
+          case "blast":
+            return null;
           case "beam":
             return e.dir === "h" ? (
               <div key={e.id}>
@@ -539,8 +510,8 @@ const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H }: { effects:
                     className="absolute left-0 top-0"
                     style={{ width: S * 1.1, height: S * 1.1, rotate: d < 0 ? 180 : 0 }}
                     initial={{ x: cx(e.c) - S / 2, y: cy(e.r) - S / 2 }}
-                    animate={{ x: d < 0 ? -S * 1.3 : W + S * 0.3 }}
-                    transition={{ duration: (d < 0 ? e.c + 1.8 : W / S - e.c + 0.8) * e.pace, ease: "linear" }}
+                    animate={{ x: d < 0 ? -S * 2.6 : W + S * 1.6, opacity: [1, 1, 1, 0] }}
+                    transition={{ duration: (d < 0 ? e.c + 3 : W / S - e.c + 2) * e.pace, ease: "linear" }}
                   >
                     <SpecialArt kind="rocketH" />
                   </motion.div>
@@ -566,23 +537,14 @@ const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H }: { effects:
                     className="absolute left-0 top-0"
                     style={{ width: S * 1.1, height: S * 1.1, rotate: d < 0 ? 180 : 0 }}
                     initial={{ x: cx(e.c) - S / 2, y: cy(e.r) - S / 2 }}
-                    animate={{ y: d < 0 ? -S * 1.3 : H + S * 0.3 }}
-                    transition={{ duration: (d < 0 ? e.r + 1.8 : H / S - e.r + 0.8) * e.pace, ease: "linear" }}
+                    animate={{ y: d < 0 ? -S * 2.6 : H + S * 1.6, opacity: [1, 1, 1, 0] }}
+                    transition={{ duration: (d < 0 ? e.r + 3 : H / S - e.r + 2) * e.pace, ease: "linear" }}
                   >
                     <SpecialArt kind="rocketV" />
                   </motion.div>
                 ))}
               </div>
             );
-          case "blast": {
-            const size = Math.min((e.radius * 2 + 1) * S * 1.15, Math.max(W, H) * 1.6);
-            return (
-              <div key={e.id}>
-                <div className="fx-blast" style={{ left: cx(e.c), top: cy(e.r), width: size, height: size }} />
-                <div className="fx-ring" style={{ left: cx(e.c), top: cy(e.r), width: size * 0.9, height: size * 0.9 }} />
-              </div>
-            );
-          }
           case "plane": {
             const x0 = cx(e.c) - S / 2;
             const y0 = cy(e.r) - S / 2;
@@ -594,8 +556,13 @@ const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H }: { effects:
                 className="absolute left-0 top-0"
                 style={{ width: S * 1.15, height: S * 1.15, scaleX: x1 >= x0 ? 1 : -1 }}
                 initial={{ x: x0, y: y0, scale: 0.6 }}
-                animate={{ x: [x0, (x0 + x1) / 2, x1], y: [y0, Math.min(y0, y1) - S * 1.6, y1], scale: [0.8, 1.5, 0.9] }}
-                transition={{ duration: 0.42, ease: "easeInOut" }}
+                animate={{
+                  x: [x0, (x0 + x1) / 2, x1, x1],
+                  y: [y0, Math.min(y0, y1) - S * 1.6, y1, y1],
+                  scale: [0.8, 1.5, 0.9, 0],
+                  opacity: [1, 1, 1, 0],
+                }}
+                transition={{ duration: 0.56, times: [0, 0.4, 0.75, 1], ease: "easeInOut" }}
               >
                 <SpecialArt kind="plane" />
               </motion.div>
@@ -634,7 +601,6 @@ const EffectsLayer = memo(function EffectsLayer({ effects, S, W, H }: { effects:
                 <div className="fx-hammer absolute" style={{ left: cx(e.c), top: cy(e.r) }}>
                   <Hammer className="text-[#ffb347] drop-shadow-[0_3px_0_#8a4b00]" style={{ width: S * 1.3, height: S * 1.3 }} strokeWidth={2.4} />
                 </div>
-                <div className="fx-ring" style={{ left: cx(e.c), top: cy(e.r), width: S * 1.8, height: S * 1.8 }} />
               </div>
             );
           case "banner": {

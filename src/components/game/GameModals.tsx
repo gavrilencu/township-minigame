@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { HelpCircle, Loader2, LogOut, Map as MapIcon, Music, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import { Gauge, HelpCircle, Loader2, LogOut, Map as MapIcon, Music, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BOOSTERS, type BoosterId } from "@/lib/game/economy";
 import type { Goal } from "@/lib/game/types";
@@ -309,16 +309,20 @@ export function PauseModal({
   open,
   sound,
   music,
+  lite,
   onToggleSound,
   onToggleMusic,
+  onToggleLite,
   onResume,
   onQuit,
 }: {
   open: boolean;
   sound: boolean;
   music: boolean;
+  lite: boolean;
   onToggleSound: () => void;
   onToggleMusic: () => void;
+  onToggleLite: () => void;
   onResume: () => void;
   onQuit: () => void;
 }) {
@@ -348,6 +352,9 @@ export function PauseModal({
               <HelpCircle className="h-5 w-5" /> Ajutor
             </button>
           </div>
+          <button onClick={onToggleLite} className={`btn h-11 w-full text-[15px] ${lite ? "btn-purple" : "btn-blue"}`}>
+            <Gauge className="h-5 w-5" /> {lite ? "Grafică redusă (pentru telefoane lente)" : "Grafică completă"}
+          </button>
           <button onClick={onQuit} className="btn btn-red h-12 w-full text-[16px]">
             <LogOut className="h-5 w-5" /> Ieși din nivel
           </button>

@@ -53,11 +53,10 @@ input {
     border-radius: 16px;
   }
 
+  /* No backdrop blur anywhere: it costs a full-screen pass per frame on phones. */
   .glass {
-    background: rgb(30 16 70 / 0.55);
+    background: rgb(30 16 70 / 0.7);
     border: 1.5px solid rgb(255 255 255 / 0.18);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
   }
 
   .title-stroke {
@@ -209,9 +208,8 @@ input {
   .shine::before {
     content: "";
     position: absolute;
-    inset: -50% auto -50% -60%;
+    inset: -50% auto -50% 0;
     width: 40%;
-    transform: rotate(20deg);
     background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
     animation: shine 3.2s ease-in-out infinite;
   }
@@ -533,13 +531,14 @@ input {
     transform: rotate(-6deg);
   }
 }
+/* transform only: animating `left` would re-layout every frame */
 @keyframes shine {
   0%,
   60% {
-    left: -60%;
+    transform: translateX(-150%) rotate(20deg);
   }
   100% {
-    left: 130%;
+    transform: translateX(330%) rotate(20deg);
   }
 }
 .twinkle {
@@ -639,9 +638,8 @@ input {
 .idle-shine::after {
   content: "";
   position: absolute;
-  inset: -20% auto -20% -70%;
+  inset: -20% auto -20% 0;
   width: 45%;
-  transform: rotate(25deg);
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.75), transparent);
   animation: idle-shine 9s ease-in-out infinite;
   animation-delay: inherit;
@@ -650,10 +648,10 @@ input {
 @keyframes idle-shine {
   0%,
   88% {
-    left: -70%;
+    transform: translateX(-160%) rotate(25deg);
   }
   100% {
-    left: 140%;
+    transform: translateX(310%) rotate(25deg);
   }
 }
 .sun-rays {
@@ -767,7 +765,6 @@ input {
 .fx-spark {
   position: absolute;
   animation: fx-spark 0.55s ease-out both;
-  filter: drop-shadow(0 0 3px rgb(255 255 255 / 0.9));
 }
 @keyframes fx-spark {
   0% {
@@ -866,6 +863,8 @@ input {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
   background: radial-gradient(circle at 50% 50%, rgb(255 244 210 / 0.6) 0%, rgb(255 130 40 / 0.28) 55%, transparent 80%);
   animation: hit-flash 0.34s ease-out both;
 }
@@ -992,11 +991,33 @@ input {
   }
 }
 
+/* Without their animation these would sit on screen for good, so they are hidden instead. */
 @media (prefers-reduced-motion: reduce) {
   .pt,
   .hit-flash {
-    animation: none;
+    display: none;
   }
+}
+
+/* ---------- Lighter graphics for slow phones ---------- */
+
+.lite .idle-shine::after,
+.lite .pt,
+.lite .fx-spark,
+.lite .hit-flash,
+.lite .shine::before {
+  display: none;
+}
+.lite .special-glow,
+.lite .cloud-drift-a,
+.lite .cloud-drift-b,
+.lite .cloud-drift-c,
+.lite .sway,
+.lite .twinkle {
+  animation: none;
+}
+.lite .special-glow {
+  opacity: 0.55;
 }
 
 /* Few moves left: a warm heartbeat instead of a blink. */

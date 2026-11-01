@@ -1,16 +1,5 @@
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { WorldTheme } from "@/lib/worlds";
-
-function CloudShape({ x, y, s }: { x: number; y: number; s: number }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`} fill="#fff" opacity="0.9">
-      <ellipse cx="0" cy="0" rx="46" ry="20" />
-      <circle cx="-18" cy="-12" r="20" />
-      <circle cx="12" cy="-20" r="26" />
-      <circle cx="36" cy="-6" r="16" />
-    </g>
-  );
-}
 
 /** A round, painterly tree: layered canopy blobs with a lit top-left side. */
 function Tree({ x, y, s, color, light }: { x: number; y: number; s: number; color: string; light: string }) {
@@ -78,8 +67,8 @@ function shade(hex: string, k: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
-/** Painted park terrace behind the board: blurred distance, stone balustrade, flowering foreground. */
-export const Scenery = memo(function Scenery({ theme }: { theme: WorldTheme }) {
+/** The painted backdrop as SVG: blurred distance, stone balustrade, flowering foreground. */
+function Painting({ theme }: { theme: WorldTheme }) {
   const night = !!theme.night;
   const leaf = theme.hillNear;
   const leafLight = shade(theme.hillNear, 0.35);
@@ -87,7 +76,7 @@ export const Scenery = memo(function Scenery({ theme }: { theme: WorldTheme }) {
   const stone = night ? "#9a97b8" : "#f1e2c8";
   const stoneDark = night ? "#5f5c82" : "#c8a983";
   return (
-    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice" aria-hidden>
+    <>
       <defs>
         <linearGradient id="scSky" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={theme.skyTop} />
@@ -124,15 +113,7 @@ export const Scenery = memo(function Scenery({ theme }: { theme: WorldTheme }) {
       {night ? (
         <g>
           {Array.from({ length: 26 }, (_, i) => (
-            <circle
-              key={i}
-              cx={(i * 193) % 1000}
-              cy={20 + ((i * 71) % 190)}
-              r={i % 3 ? 1.4 : 2.2}
-              fill="#fff"
-              className="twinkle"
-              style={{ animationDelay: `${(i % 7) * 0.4}s` }}
-            />
+            <circle key={i} cx={(i * 193) % 1000} cy={20 + ((i * 71) % 190)} r={i % 3 ? 1.4 : 2.2} fill="#fff" opacity={0.5 + (i % 4) * 0.12} />
           ))}
           <g transform="translate(800 110)">
             <circle r="110" fill="url(#scGlow)" opacity="0.5" />
@@ -146,13 +127,6 @@ export const Scenery = memo(function Scenery({ theme }: { theme: WorldTheme }) {
           <circle r="46" fill="#fff6c2" />
         </g>
       )}
-
-      <g className="cloud-drift-a">
-        <CloudShape x={120} y={90} s={1.1} />
-      </g>
-      <g className="cloud-drift-b">
-        <CloudShape x={480} y={60} s={0.8} />
-      </g>
 
       {/* distance: soft hills, trees and rooftops out of focus */}
       <g filter="url(#scFar)">
@@ -223,6 +197,56 @@ export const Scenery = memo(function Scenery({ theme }: { theme: WorldTheme }) {
 
       {night && <rect width="1000" height="500" fill="#141a52" opacity="0.28" />}
       <rect width="1000" height="500" fill="url(#scVignette)" />
-    </svg>
+    </>
+  );
+}
+
+/**
+ * Painted park terrace behind the board. The SVG (with its blur filters) is drawn once into a
+ * bitmap, so the scene costs nothing per frame; only the clouds move, as plain elements.
+ */
+export const Scenery = memo(function Scenery({ theme, lite }: { theme: WorldTheme; lite?: boolean }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    setSrc("data:image/svg+xml;charset=utf-8," + encodeURIComponent(el.outerHTML));
+  }, [theme]);
+
+  return (
+    <>
+      <div className="absolute inset-0" style={{ background: `linear-gradient(${theme.skyTop}, ${theme.skyBottom})` }} />
+      {src && (
+        // a bitmap of the scene built on this device; next/image has nothing to optimize here
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+      )}
+      <div className="hidden">
+        <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice">
+          <Painting theme={theme} />
+        </svg>
+      </div>
+      {!lite &&
+        [
+          ["cloud-drift-a", 12, 1.1],
+          ["cloud-drift-b", 22, 0.8],
+          ["cloud-drift-c", 7, 0.65],
+        ].map(([cls, top, s], i) => (
+          <div
+            key={i}
+            className={`pointer-events-none absolute left-0 ${cls}`}
+            style={{ top: `${top}%`, opacity: theme.night ? 0.2 : 0.85, transform: `scale(${s})` }}
+          >
+            <div className="relative h-10 w-32">
+              <div className="absolute inset-x-0 bottom-0 h-6 rounded-full bg-white" />
+              <div className="absolute left-5 top-0 h-9 w-9 rounded-full bg-white" />
+              <div className="absolute left-14 -top-2 h-12 w-12 rounded-full bg-white" />
+              <div className="absolute right-3 top-2 h-7 w-7 rounded-full bg-white" />
+            </div>
+          </div>
+        ))}
+    </>
   );
 });

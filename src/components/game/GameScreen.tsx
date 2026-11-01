@@ -20,7 +20,7 @@ import type { Effect, Frame, Goal, Pos, SpecialKind } from "@/lib/game/types";
 import { assistMoves } from "@/lib/shared";
 import { play, unlockAudio } from "@/lib/sound";
 import { pieceSprites } from "@/lib/sprites";
-import { useGame } from "@/lib/store";
+import { selectLite, useGame } from "@/lib/store";
 import { worldOf, worldTheme } from "@/lib/worlds";
 import { WorldParticles } from "../art/Particles";
 import { GEM_COLORS, GemDefs, GoalIcon, PieceSources, StarShape } from "../art/Pieces";
@@ -76,6 +76,8 @@ export function GameScreen({
   const music = useGame((s) => s.music);
   const toggleSound = useGame((s) => s.toggleSound);
   const toggleMusic = useGame((s) => s.toggleMusic);
+  const lite = useGame(selectLite);
+  const setGfx = useGame((s) => s.setGfx);
   const setPlayer = useGame((s) => s.setPlayer);
   const setResult = useGame((s) => s.setResult);
   const spendBoosterLocal = useGame((s) => s.spendBoosterLocal);
@@ -197,7 +199,7 @@ export function GameScreen({
 
   function shake(f: Frame) {
     const big = f.effects.some((e) => (e.type === "blast" && e.radius >= 2) || (e.type === "banner" && e.text === "Combo!"));
-    if (!big || !shakeScope.current) return;
+    if (!big || lite || !shakeScope.current) return;
     void shakeAnimate(shakeScope.current, { x: [0, -8, 8, -6, 5, -2, 0], y: [0, 4, -4, 3, -2, 1, 0] }, { duration: 0.42 });
   }
 
@@ -211,7 +213,7 @@ export function GameScreen({
       for (const s of f.sounds) play(s, f.cascade);
       // hit-stop: a big impact flashes the screen and holds for a few frames
       const big = isBig(f);
-      if (big) setFlash((k) => k + 1);
+      if (big && !lite) setFlash((k) => k + 1);
       await wait(f.duration / speed + (big ? 90 : 0));
     }
   }
@@ -421,12 +423,12 @@ export function GameScreen({
   const marks = [1, 1 - (0.12 * cfg.baseMoves) / cfg.moves, 1 - (0.3 * cfg.baseMoves) / cfg.moves];
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#5fc3ff]">
+    <div className={`fixed inset-0 overflow-hidden bg-[#5fc3ff] ${lite ? "lite" : ""}`}>
       <GemDefs />
       <PieceSources />
       <div className={dialogOpen ? "anim-paused" : undefined}>
-      <Scenery theme={theme} />
-      <WorldParticles kind={theme.particles} seed={level} />
+      <Scenery theme={theme} lite={lite} />
+      {!lite && <WorldParticles kind={theme.particles} seed={level} />}
 
       <div className="absolute inset-0 flex gap-2 pb-[max(env(safe-area-inset-bottom),6px)] pl-[max(env(safe-area-inset-left),8px)] pr-[max(env(safe-area-inset-right),8px)] pt-[max(env(safe-area-inset-top),6px)]">
         {/* Left: wooden sign with the goals and the moves */}
@@ -495,11 +497,12 @@ export function GameScreen({
 
         {/* Center: board and the star bar */}
         <main ref={areaRef} className="relative flex min-w-0 flex-1 items-center justify-center">
-          <div ref={shakeScope} className="flex flex-col items-center gap-2">
+          <div ref={shakeScope} className="flex flex-col items-center gap-2 will-change-transform">
             <Board
               frame={frame}
               S={S}
               sprites={sprites}
+              lite={lite}
               effects={effects}
               selected={selected}
               hint={hint}
@@ -638,14 +641,16 @@ export function GameScreen({
         ))}
       </div>
 
-      {(phase === "won" || phase === "done") && <Confetti />}
+      {(phase === "won" || phase === "done") && <Confetti count={lite ? 16 : 46} />}
 
       <PauseModal
         open={paused}
         sound={sound}
         music={music}
+        lite={lite}
         onToggleSound={toggleSound}
         onToggleMusic={toggleMusic}
+        onToggleLite={() => setGfx(lite ? "high" : "low")}
         onResume={() => setPaused(false)}
         onQuit={quit}
       />
@@ -701,10 +706,10 @@ function StarBar({ width, used, total, marks, lit }: { width: number; used: numb
 
 const CONFETTI = ["#ff4b5c", "#ffcf26", "#33a3ff", "#4ed351", "#b863ff", "#ff9f43", "#ffffff"];
 
-function Confetti() {
+function Confetti({ count }: { count: number }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
-      {Array.from({ length: 46 }, (_, i) => (
+      {Array.from({ length: count }, (_, i) => (
         <span
           key={i}
           className="confetti absolute top-[-20px] block"

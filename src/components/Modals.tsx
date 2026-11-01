@@ -1,14 +1,14 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Check, Gift, HelpCircle, Loader2, LogOut, Music, Play, UserMinus, Volume2, VolumeX } from "lucide-react";
+import { Check, Gauge, Gift, HelpCircle, Loader2, LogOut, Music, Play, UserMinus, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { BOOSTERS, DAILY_REWARDS, PRE_BOOSTERS, type PreBooster } from "@/lib/game/economy";
 import { generateLevel } from "@/lib/game/levels";
 import { AVATARS, assistMoves, type FriendDTO, type LevelScoreRow } from "@/lib/shared";
 import { play } from "@/lib/sound";
-import { useGame } from "@/lib/store";
+import { selectLite, useGame } from "@/lib/store";
 import type { GoalKind, LevelConfig } from "@/lib/game/types";
 import { AvatarArt } from "./art/Avatars";
 import { Coin, GoalIcon, StarShape } from "./art/Pieces";
@@ -322,6 +322,8 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
   const music = useGame((s) => s.music);
   const toggleSound = useGame((s) => s.toggleSound);
   const toggleMusic = useGame((s) => s.toggleMusic);
+  const lite = useGame(selectLite);
+  const setGfx = useGame((s) => s.setGfx);
   const setPlayer = useGame((s) => s.setPlayer);
   const logout = useGame((s) => s.logout);
   const toast = useGame((s) => s.toast);
@@ -402,6 +404,9 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
                 <HelpCircle className="h-5 w-5" /> Ajutor
               </button>
             </div>
+            <button onClick={() => setGfx(lite ? "high" : "low")} className={`btn mt-2 h-11 w-full text-[15px] ${lite ? "btn-purple" : "btn-blue"}`}>
+              <Gauge className="h-5 w-5" /> {lite ? "Grafică redusă (pentru telefoane lente)" : "Grafică completă"}
+            </button>
             <button
               onClick={() => {
                 onClose();

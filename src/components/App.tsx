@@ -8,6 +8,7 @@ import { registerServiceWorker } from "@/lib/pwa";
 import type { PreBooster } from "@/lib/game/economy";
 import type { FriendDTO } from "@/lib/shared";
 import { startMusic, stopMusic } from "@/lib/music";
+import { probeFrameTimes, quickLowPowerGuess } from "@/lib/perf";
 import { setSoundEnabled, unlockAudio } from "@/lib/sound";
 import { useGame, USERNAME_KEY } from "@/lib/store";
 import { GemDefs } from "./art/Pieces";
@@ -51,6 +52,7 @@ export default function App() {
   const music = useGame((s) => s.music);
   const setSession = useGame((s) => s.setSession);
   const setFriends = useGame((s) => s.setFriends);
+  const setAutoLite = useGame((s) => s.setAutoLite);
   const [boot, setBoot] = useState<Boot>({ state: "loading" });
   const [tab, setTab] = useState<Tab>("map");
   const [prevTab, setPrevTab] = useState<Tab>("map");
@@ -89,6 +91,22 @@ export default function App() {
     if (music && player) startMusic();
     else stopMusic();
   }, [music, !!player]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Slow phone? Little memory, or the map cannot keep a smooth frame rate: switch to lighter graphics.
+  useEffect(() => {
+    if (!player) return;
+    if (quickLowPowerGuess()) setAutoLite(true);
+    let live = true;
+    const t = setTimeout(() => {
+      void probeFrameTimes(1500).then((r) => {
+        if (live && (r.p75 > 26 || r.long >= 3)) setAutoLite(true);
+      });
+    }, 700);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [!!player]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const username = player?.username;
   useEffect(() => {
@@ -154,10 +172,10 @@ export default function App() {
           <motion.div
             key={`game-${playing.key}`}
             className="fixed inset-0"
-            initial={{ opacity: 0, scale: 1.04 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           >
             <GameScreen
               level={playing.level}
